@@ -1,0 +1,297 @@
+{
+    "optimization_time": 21.414616346359253,
+    "best_config": {
+        "balanced_accuracy": 0.9904761904761905,
+        "status": "success",
+        "config": {
+            "prototype": "normalization_features_imputation_classification",
+            "classification": {
+                "n_hidden_layers": 5,
+                "n_neurons": 100,
+                "activation": "tanh",
+                "solver": "sgd",
+                "alpha": 1e-05,
+                "learning_rate": "adaptive",
+                "type": "MLPClassifier"
+            },
+            "normalization": {
+                "type": "PowerTransformer"
+            },
+            "features": {
+                "type": "FunctionTransformer"
+            },
+            "imputation": {
+                "type": "FunctionTransformer"
+            }
+        },
+        "time_total_s": 6.060976028442383
+    },
+    "results": [
+        {
+            "balanced_accuracy": 0.6581349206349206,
+            "status": "success",
+            "config": {
+                "prototype": "features_normalization_imputation_classification",
+                "normalization": {
+                    "type": "FunctionTransformer"
+                },
+                "features": {
+                    "type": "FunctionTransformer"
+                },
+                "imputation": {
+                    "type": "SimpleImputer",
+                    "strategy": "most_frequent"
+                },
+                "classification": {
+                    "type": "KNeighborsClassifier",
+                    "n_neighbors": 7,
+                    "weights": "uniform",
+                    "metric": "euclidean"
+                }
+            },
+            "time_total_s": 0.09380388259887695
+        },
+        {
+            "balanced_accuracy": 0.9904761904761905,
+            "status": "success",
+            "config": {
+                "prototype": "normalization_features_imputation_classification",
+                "classification": {
+                    "n_hidden_layers": 5,
+                    "n_neurons": 100,
+                    "activation": "tanh",
+                    "solver": "sgd",
+                    "alpha": 1e-05,
+                    "learning_rate": "adaptive",
+                    "type": "MLPClassifier"
+                },
+                "normalization": {
+                    "type": "PowerTransformer"
+                },
+                "features": {
+                    "type": "FunctionTransformer"
+                },
+                "imputation": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 6.060976028442383
+        },
+        {
+            "balanced_accuracy": 0.7887301587301587,
+            "status": "success",
+            "config": {
+                "prototype": "features_normalization_imputation_classification",
+                "normalization": {
+                    "with_centering": true,
+                    "with_scaling": true,
+                    "type": "RobustScaler"
+                },
+                "features": {
+                    "n_components": 4,
+                    "type": "PCA"
+                },
+                "classification": {
+                    "n_estimators": 50,
+                    "max_depth": 4,
+                    "max_features": 3,
+                    "min_samples_split": 5,
+                    "max_leaf_nodes": 3,
+                    "bootstrap": false,
+                    "criterion": "gini",
+                    "type": "RandomForestClassifier"
+                },
+                "imputation": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 0.705418586730957
+        },
+        {
+            "balanced_accuracy": 0.9742857142857144,
+            "status": "success",
+            "config": {
+                "prototype": "normalization_imputation_features_classification",
+                "classification": {
+                    "n_hidden_layers": 1,
+                    "n_neurons": 100,
+                    "activation": "tanh",
+                    "solver": "sgd",
+                    "alpha": 1e-05,
+                    "learning_rate": "adaptive",
+                    "type": "MLPClassifier"
+                },
+                "normalization": {
+                    "type": "PowerTransformer"
+                },
+                "features": {
+                    "type": "FunctionTransformer"
+                },
+                "imputation": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 1.9738569259643555
+        },
+        {
+            "balanced_accuracy": 0.6265079365079366,
+            "status": "success",
+            "config": {
+                "prototype": "imputation_features_normalization_classification",
+                "normalization": {
+                    "with_mean": true,
+                    "with_std": false,
+                    "type": "StandardScaler"
+                },
+                "features": {
+                    "n_components": 1,
+                    "type": "PCA"
+                },
+                "imputation": {
+                    "strategy": "most_frequent",
+                    "type": "SimpleImputer"
+                },
+                "classification": {
+                    "n_estimators": 100,
+                    "learning_rate": 0.001,
+                    "type": "AdaBoostClassifier"
+                }
+            },
+            "time_total_s": 1.203000783920288
+        },
+        {
+            "balanced_accuracy": 0.9904761904761905,
+            "status": "success",
+            "config": {
+                "prototype": "normalization_features_imputation_classification",
+                "classification": {
+                    "n_hidden_layers": 10,
+                    "n_neurons": 50,
+                    "activation": "tanh",
+                    "solver": "sgd",
+                    "alpha": 1e-05,
+                    "learning_rate": "adaptive",
+                    "type": "MLPClassifier"
+                },
+                "normalization": {
+                    "type": "PowerTransformer"
+                },
+                "features": {
+                    "type": "FunctionTransformer"
+                },
+                "imputation": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 6.112589597702026
+        },
+        {
+            "balanced_accuracy": 0.9015873015873016,
+            "status": "success",
+            "config": {
+                "prototype": "normalization_imputation_features_classification",
+                "features": {
+                    "n_components": 4,
+                    "type": "PCA"
+                },
+                "imputation": {
+                    "initial_strategy": "constant",
+                    "imputation_order": "descending",
+                    "type": "IterativeImputer"
+                },
+                "classification": {
+                    "n_hidden_layers": 5,
+                    "n_neurons": 10,
+                    "activation": "relu",
+                    "solver": "lbfgs",
+                    "alpha": 0.0001,
+                    "learning_rate": "constant",
+                    "type": "MLPClassifier"
+                },
+                "normalization": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 1.4207143783569336
+        },
+        {
+            "balanced_accuracy": 0.7195238095238097,
+            "status": "success",
+            "config": {
+                "prototype": "features_imputation_normalization_classification",
+                "imputation": {
+                    "strategy": "most_frequent",
+                    "type": "SimpleImputer"
+                },
+                "classification": {
+                    "n_estimators": 100,
+                    "learning_rate": 0.001,
+                    "type": "AdaBoostClassifier"
+                },
+                "normalization": {
+                    "type": "MinMaxScaler"
+                },
+                "features": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 1.3480842113494873
+        },
+        {
+            "balanced_accuracy": 0.9628571428571429,
+            "status": "success",
+            "config": {
+                "prototype": "imputation_features_normalization_classification",
+                "features": {
+                    "n_components": 7,
+                    "type": "PCA"
+                },
+                "imputation": {
+                    "initial_strategy": "most_frequent",
+                    "imputation_order": "ascending",
+                    "type": "IterativeImputer"
+                },
+                "classification": {
+                    "n_neighbors": 10,
+                    "weights": "distance",
+                    "metric": "manhattan",
+                    "type": "KNeighborsClassifier"
+                },
+                "normalization": {
+                    "type": "PowerTransformer"
+                }
+            },
+            "time_total_s": 0.5134527683258057
+        },
+        {
+            "balanced_accuracy": 0.9374603174603175,
+            "status": "success",
+            "config": {
+                "prototype": "imputation_features_normalization_classification",
+                "normalization": {
+                    "with_mean": false,
+                    "with_std": true,
+                    "type": "StandardScaler"
+                },
+                "imputation": {
+                    "initial_strategy": "most_frequent",
+                    "imputation_order": "random",
+                    "type": "IterativeImputer"
+                },
+                "classification": {
+                    "n_hidden_layers": 1,
+                    "n_neurons": 50,
+                    "activation": "tanh",
+                    "solver": "lbfgs",
+                    "alpha": 0.01,
+                    "learning_rate": "constant",
+                    "type": "MLPClassifier"
+                },
+                "features": {
+                    "type": "FunctionTransformer"
+                }
+            },
+            "time_total_s": 1.6408259868621826
+        }
+    ]
+}
