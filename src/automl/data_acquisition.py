@@ -21,7 +21,7 @@ def load_dataset_from_openml(id, encode=False):
     return X, y, categorical_indicator
 
 
-def load_agro_from_csv(path=os.path.join("/", "home", "data")):
+def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
     def _ground_potential_reconstruction(df):
         dfs = {}
         for minute in [0, 15, 30, 45]:
