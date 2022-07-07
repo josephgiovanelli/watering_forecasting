@@ -11,7 +11,7 @@ from flaml import tune
 
 from utils.argparse import parse_args
 from utils.json_to_csv import json_to_csv
-from automl.data_acquisition import load_agro_data_from_csv, load_dataset_from_openml
+from utils.data_acquisition import load_agro_data_from_csv, load_dataset_from_openml
 from automl.optimization import objective
 from automl.space_loading import get_space
 
