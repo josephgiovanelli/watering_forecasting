@@ -21,6 +21,12 @@ def _get_space(input_space):
             return tune.choice([_get_space(elem) for elem in value])
         if key == "randint":
             return tune.randint(lower=value[0], upper=value[1])
+        if key == "uniform":
+            return tune.uniform(lower=value[0], upper=value[1])
+        if key == "quniform":
+            return tune.quniform(lower=value[0], upper=value[1], q=value[2])
+        if key == "loguniform":
+            return tune.loguniform(lower=value[0], upper=value[1])
         if type(value) is dict:
             output_space[key] = _get_space(value)
         elif type(value) is list:

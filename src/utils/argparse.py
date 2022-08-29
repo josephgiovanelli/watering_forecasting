@@ -6,19 +6,35 @@ def parse_args():
     parser = argparse.ArgumentParser(description="HAMLET")
 
     parser.add_argument(
-        "-dataset",
-        "--dataset",
+        "-window_size",
+        "--window_size",
         nargs="?",
-        type=str,
+        type=int,
         required=True,
-        help="dataset to analise",
+        help="rolling window size",
+    )
+    parser.add_argument(
+        "-stride",
+        "--stride",
+        nargs="?",
+        type=int,
+        required=False,
+        help="rolling window stride",
+    )
+    parser.add_argument(
+        "-output_horizon",
+        "--output_horizon",
+        nargs="?",
+        type=int,
+        required=True,
+        help="output horizon in hours to predict",
     )
     parser.add_argument(
         "-metric",
         "--metric",
         nargs="?",
         type=str,
-        required=True,
+        required=False,
         help="metric to optimize",
     )
     parser.add_argument(
@@ -26,7 +42,7 @@ def parse_args():
         "--mode",
         nargs="?",
         type=str,
-        required=True,
+        required=False,
         help="either minimize or maximize the metric (min or max)",
     )
     parser.add_argument(
@@ -63,4 +79,5 @@ def parse_args():
     )
 
     args = parser.parse_args()
+
     return args

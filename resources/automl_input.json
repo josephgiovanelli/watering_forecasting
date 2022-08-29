@@ -1,157 +1,31 @@
 {
     "prototype": {
         "choice": [
-            "normalization_features_imputation_classification",
-            "normalization_imputation_features_classification",
-            "features_imputation_normalization_classification",
-            "features_normalization_imputation_classification",
-            "imputation_normalization_features_classification",
-            "imputation_features_normalization_classification"
+            "regression"
         ]
     },
-    "normalization": {
+    "regression": {
         "choice": [
             {
-                "type": "FunctionTransformer"
-            },
-            {
-                "type": "PowerTransformer"
-            },
-            {
-                "type": "RobustScaler",
-                "with_centering": {
+                "type": "MLPRegressor",
+                "hidden_layer_sizes": {
                     "choice": [
-                        true,
-                        false
-                    ]
-                },
-                "with_scaling": {
-                    "choice": [
-                        true,
-                        false
-                    ]
-                }
-            },
-            {
-                "type": "StandardScaler",
-                "with_mean": {
-                    "choice": [
-                        true,
-                        false
-                    ]
-                },
-                "with_std": {
-                    "choice": [
-                        true,
-                        false
-                    ]
-                }
-            },
-            {
-                "type": "MinMaxScaler"
-            }
-        ]
-    },
-    "features": {
-        "choice": [
-            {
-                "type": "FunctionTransformer"
-            },
-            {
-                "type": "SelectKBest",
-                "k": {
-                    "randint": [
-                        1,
-                        10
-                    ]
-                }
-            },
-            {
-                "type": "PCA",
-                "n_components": {
-                    "randint": [
-                        1,
-                        8
-                    ]
-                }
-            }
-        ]
-    },
-    "imputation": {
-        "choice": [
-            {
-                "type": "FunctionTransformer"
-            },
-            {
-                "type": "SimpleImputer",
-                "strategy": {
-                    "choice": [
-                        "most_frequent",
-                        "constant"
-                    ]
-                }
-            },
-            {
-                "type": "IterativeImputer",
-                "initial_strategy": {
-                    "choice": [
-                        "most_frequent",
-                        "constant"
-                    ]
-                },
-                "imputation_order": {
-                    "choice": [
-                        "ascending",
-                        "descending",
-                        "roman",
-                        "arabic",
-                        "random"
-                    ]
-                }
-            }
-        ]
-    },
-    "classification": {
-        "choice": [
-            {
-                "type": "KNeighborsClassifier",
-                "n_neighbors": {
-                    "randint": [
-                        3,
-                        20
-                    ]
-                },
-                "weights": {
-                    "choice": [
-                        "uniform",
-                        "distance"
-                    ]
-                },
-                "metric": {
-                    "choice": [
-                        "minkowski",
-                        "euclidean",
-                        "manhattan"
-                    ]
-                }
-            },
-            {
-                "type": "MLPClassifier",
-                "n_hidden_layers": {
-                    "choice": [
-                        1,
-                        5,
-                        10,
-                        25
-                    ]
-                },
-                "n_neurons": {
-                    "choice": [
-                        5,
-                        10,
-                        25,
-                        50,
-                        100
+                        "[1024]",
+                        "[512]",
+                        "[128]",
+                        "[64]",
+                        "[1024, 1024]",
+                        "[512, 512]",
+                        "[128, 128]",
+                        "[64, 64]",
+                        "[1024, 1024, 1024]",
+                        "[512, 512, 512]",
+                        "[128, 128, 128]",
+                        "[64, 64, 64]",
+                        "[1024, 1024, 1024, 1024]",
+                        "[512, 512, 512, 512]",
+                        "[128, 128, 128, 128]",
+                        "[64, 64, 64, 64]"
                     ]
                 },
                 "activation": {
@@ -169,11 +43,9 @@
                     ]
                 },
                 "alpha": {
-                    "choice": [
-                        0.0001,
-                        0.001,
-                        0.01,
-                        0.00001
+                    "loguniform": [
+                        1e-5,
+                        1e-1
                     ]
                 },
                 "learning_rate": {
@@ -182,28 +54,308 @@
                         "invscaling",
                         "adaptive"
                     ]
+                },
+                "learning_rate_init": {
+                    "loguniform": [
+                        1e-4,
+                        1e-1
+                    ]
+                },
+                "power_t": {
+                    "uniform": [
+                        1e-1,
+                        1.0
+                    ]
+                },
+                "max_iter": {
+                    "choice": [
+                        50,
+                        100,
+                        150,
+                        200,
+                        250,
+                        300
+                    ]
+                },
+                "momentum": {
+                    "quniform": [
+                        0.0,
+                        1.0,
+                        0.1
+                    ]
+                },
+                "nesterovs_momentum": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "beta_1": {
+                    "quniform": [
+                        0.1,
+                        0.9,
+                        0.1
+                    ]
+                },
+                "beta_2": {
+                    "quniform": [
+                        0.001,
+                        0.999,
+                        0.001
+                    ]
+                },
+                "epsilon": {
+                    "loguniform": [
+                        1e-10,
+                        1e-5
+                    ]
                 }
             },
             {
-                "type": "SVC",
-                "'C'": {
+                "type": "DecisionTreeRegressor",
+                "criterion": {
                     "choice": [
-                        0.001,
-                        0.005,
-                        0.01,
-                        0.05,
-                        0.1,
-                        0.5,
-                        1,
-                        5
+                        "squared_error",
+                        "friedman_mse",
+                        "absolute_error"
                     ]
                 },
+                "splitter": {
+                    "choice": [
+                        "best",
+                        "random"
+                    ]
+                },
+                "max_features": {
+                    "choice": [
+                        "auto",
+                        "sqrt",
+                        "log2"
+                    ]
+                }
+            },
+            {
+                "type": "RandomForestRegressor",
+                "n_estimators": {
+                    "choice": [
+                        10,
+                        30,
+                        50,
+                        70,
+                        100
+                    ]
+                },
+                "criterion": {
+                    "choice": [
+                        "squared_error",
+                        "absolute_error"
+                    ]
+                },
+                "max_features": {
+                    "choice": [
+                        "auto",
+                        "sqrt",
+                        "log2"
+                    ]
+                },
+                "bootstrap": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "oob_score": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "n_jobs": {
+                    "choice": [
+                        -1
+                    ]
+                },
+                "warm_start": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                }
+            },
+            {
+                "type": "ExtraTreesRegressor",
+                "n_estimators": {
+                    "choice": [
+                        10,
+                        30,
+                        50,
+                        70,
+                        100
+                    ]
+                },
+                "criterion": {
+                    "choice": [
+                        "squared_error",
+                        "absolute_error"
+                    ]
+                },
+                "max_features": {
+                    "choice": [
+                        "auto",
+                        "sqrt",
+                        "log2"
+                    ]
+                },
+                "bootstrap": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "oob_score": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "n_jobs": {
+                    "choice": [
+                        -1
+                    ]
+                },
+                "warm_start": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                }
+            },
+            {
+                "super_type": "MultiOutputRegressor",
+                "type": "BaggingRegressor",
+                "base_estimator": {
+                    "choice": [
+                        "DecisionTreeRegressor",
+                        "SVR"
+                    ]
+                },
+                "n_estimators": {
+                    "choice": [
+                        5,
+                        10,
+                        15
+                    ]
+                },
+                "bootstrap": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "bootstrap_features": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "oob_score": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                },
+                "n_jobs": {
+                    "choice": [
+                        -1
+                    ]
+                },
+                "warm_start": {
+                    "choice": [
+                        true,
+                        false
+                    ]
+                }
+            },
+            {
+                "super_type": "MultiOutputRegressor",
+                "type": "AdaBoostRegressor",
+                "base_estimator": {
+                    "choice": [
+                        "DecisionTreeRegressor",
+                        "SVR"
+                    ]
+                },
+                "n_estimators": {
+                    "choice": [
+                        10,
+                        30,
+                        50,
+                        70,
+                        100
+                    ]
+                },
+                "learning_rate": {
+                    "loguniform": [
+                        0.1,
+                        4.0
+                    ]
+                },
+                "loss": {
+                    "choice": [
+                        "linear",
+                        "square",
+                        "exponential"
+                    ]
+                }
+            },
+            {
+                "super_type": "MultiOutputRegressor",
+                "type": "HistGradientBoostingRegressor",
+                "loss": {
+                    "choice": [
+                        "squared_error",
+                        "absolute_error",
+                        "quantile"
+                    ]
+                },
+                "quantile": {
+                    "uniform": [
+                        0.0,
+                        1.0
+                    ]
+                },
+                "learning_rate": {
+                    "uniform": [
+                        0.1,
+                        1.0
+                    ]
+                },
+                "max_iter": {
+                    "choice": [
+                        30,
+                        50,
+                        100,
+                        150
+                    ]
+                },
+                "l2_regularization": {
+                    "quniform": [
+                        0.0,
+                        0.1,
+                        0.0001
+                    ]
+                }
+            },
+            {
+                "super_type": "MultiOutputRegressor",
+                "type": "SVR",
                 "kernel": {
                     "choice": [
                         "linear",
                         "poly",
                         "rbf",
-                        "sigmoid"
+                        "sigmoid",
+                        "precomputed"
                     ]
                 },
                 "degree": {
@@ -211,15 +363,34 @@
                         2,
                         3,
                         4,
-                        5,
-                        10,
-                        20
+                        5
                     ]
                 },
                 "gamma": {
                     "choice": [
-                        "auto",
-                        "scale"
+                        "scale",
+                        "auto"
+                    ]
+                },
+                "tol": {
+                    "loguniform": [
+                        1e-4,
+                        1e-2
+                    ]
+                },
+                "C": {
+                    "choice": [
+                        0.001,
+                        0.01,
+                        0.1,
+                        1,
+                        5
+                    ]
+                },
+                "epsilon": {
+                    "loguniform": [
+                        0.001,
+                        1.0
                     ]
                 },
                 "shrinking": {
@@ -230,70 +401,72 @@
                 }
             },
             {
-                "type": "RandomForestClassifier",
-                "n_estimators": {
-                    "choice": [
-                        10,
-                        25,
-                        50,
-                        75,
-                        100
-                    ]
-                },
-                "max_depth": {
+                "type": "keras",
+                "num_epochs": {
                     "randint": [
                         1,
-                        5
-                    ]
-                },
-                "max_features": {
-                    "randint": [
-                        1,
-                        4
-                    ]
-                },
-                "min_samples_split": {
-                    "randint": [
-                        2,
-                        6
-                    ]
-                },
-                "max_leaf_nodes": {
-                    "randint": [
-                        2,
-                        6
-                    ]
-                },
-                "bootstrap": {
-                    "choice": [
-                        true,
-                        false
-                    ]
-                },
-                "criterion": {
-                    "choice": [
-                        "gini",
-                        "entropy"
-                    ]
-                }
-            },
-            {
-                "type": "AdaBoostClassifier",
-                "n_estimators": {
-                    "choice": [
-                        10,
-                        50,
-                        100,
                         500
                     ]
                 },
-                "learning_rate": {
+                "batch_size": {
                     "choice": [
-                        0.0001,
-                        0.001,
-                        0.01,
-                        0.1,
-                        1.0
+                        1,
+                        16,
+                        32,
+                        64,
+                        128,
+                        256,
+                        512
+                    ]
+                },
+                "neuron_count_per_hidden_layer": {
+                    "choice": [
+                        "[256, 256]",
+                        "[128, 128]",
+                        "[64, 64]",
+                        "[32, 32]",
+                        "[16, 16]",
+                        "[256, 256, 256]",
+                        "[128, 128, 128]",
+                        "[64, 64, 64]",
+                        "[32, 32, 32]",
+                        "[16, 16, 16]",
+                        "[128, 64, 128]",
+                        "[128, 64, 32, 64, 128]",
+                        "[256, 128, 64, 128, 256]",
+                        "[256, 128, 64, 32, 64, 128, 256]"
+                    ]
+                },
+                "dropout": {
+                    "quniform": [
+                        0.0,
+                        0.9,
+                        0.1
+                    ]
+                },
+                "activation_function": {
+                    "choice": [
+                        "sigmoid",
+                        "tanh",
+                        "ReLU",
+                        "softmax"
+                    ]
+                },
+                "last_activation_function": {
+                    "choice": [
+                        "sigmoid",
+                        "tanh",
+                        "ReLU",
+                        "softmax"
+                    ]
+                },
+                "optimizer": {
+                    "choice": [
+                        "SGD",
+                        "Adagrad",
+                        "RMSProp",
+                        "Adadelta",
+                        "Adam"
                     ]
                 }
             }

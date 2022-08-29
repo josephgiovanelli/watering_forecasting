@@ -1,10 +1,9 @@
 # Scikit-learn provides a set of machine learning techniques
 import traceback
 import numpy as np
-from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import cross_validate
+
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer
+from sklearn.metrics import mean_squared_error
 
 ## Feature Engineering operators
 from sklearn.decomposition import PCA
@@ -15,23 +14,36 @@ from sklearn.impute import SimpleImputer
 from sklearn.impute import IterativeImputer
 
 ## Normalization operators
-from sklearn.preprocessing import (
-    OrdinalEncoder,
-    RobustScaler,
-    StandardScaler,
-    MinMaxScaler,
-    PowerTransformer,
-    KBinsDiscretizer,
-    Binarizer,
-)
+from sklearn.preprocessing import MinMaxScaler
 
-## Classification algorithms
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+## Regression algorithms
+from sklearn.neural_network import MLPRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import ExtraTreesRegressor
+
+from sklearn.multioutput import MultiOutputRegressor
+
+from sklearn.ensemble import BaggingRegressor
+from sklearn.ensemble import AdaBoostRegressor
+from sklearn.ensemble import (
+    HistGradientBoostingRegressor,
+)  # this estimator is much faster than GradientBoostingRegressor for big datasets (n_samples >= 10 000)
+from sklearn.ensemble import VotingRegressor
+from sklearn.ensemble import StackingRegressor
+
+from sklearn.svm import SVR
+
+# NNs
+import tensorflow as tf
+from tensorflow import keras
+
+from utils.data_acquisition import (
+    normalize_data,
+    denormalize_data,
+    normalization,
+    inverse_normalization,
+)
 
 
 def get_prototype(config):
@@ -71,25 +83,34 @@ def instantiate_pipeline(prototype, seed, config):
         # remove the "type" hyper-parameter and build a dict
         # with just the hyper-parameters that operator expects
         operator_parameters = {
-            param_name: config[step][param_name]
+            param_name: globals()[config[step][param_name]]()
+            if param_name == "base_estimator"  #
+            else config[step][param_name]  #
             for param_name in config[step]
-            if param_name != "type"
+            if param_name != "super_type" and param_name != "type"
         }
-        # The MLPClassifier expects a tuple that specifies the number of layers
-        # and the numbers of neurons per layer
-        # In json it is not possible to put tuples (we specified two different hyper-parameters)
-        if config[step]["type"] == "MLPClassifier":
-            operator_parameters["hidden_layer_sizes"] = (
-                operator_parameters["n_neurons"]
-            ) * operator_parameters["n_hidden_layers"]
-            operator_parameters.pop("n_neurons", None)
-            operator_parameters.pop("n_hidden_layers", None)
+
+        if config[step]["type"] == "MLPRegressor":
+            operator_parameters["hidden_layer_sizes"] = eval(
+                operator_parameters["hidden_layer_sizes"]
+            )
 
         # Instantiate the operator/algorithm, if random_state is in the hyper-parameters
         # of the operator, add it
         if "random_state" in globals()[config[step]["type"]]().get_params():
-            operator = globals()[config[step]["type"]](
-                random_state=seed, **operator_parameters
+            if "super_type" in config[step]:
+                operator = globals()[config[step]["super_type"]](
+                    globals()[config[step]["type"]](
+                        random_state=seed, **operator_parameters
+                    )
+                )
+            else:
+                operator = globals()[config[step]["type"]](
+                    random_state=seed, **operator_parameters
+                )
+        elif "super_type" in config[step]:
+            operator = globals()[config[step]["super_type"]](
+                globals()[config[step]["type"]](**operator_parameters)
             )
         else:
             operator = globals()[config[step]["type"]](**operator_parameters)
@@ -101,13 +122,158 @@ def instantiate_pipeline(prototype, seed, config):
     return Pipeline(pipeline)
 
 
-def objective(X, y, metric, seed, config):
-    """Function to optimize (i.e., the order of the pre-processing transformations + the ml algorithm)
+def scikitlearn_objective(X_train, y_train, X_val, y_val, window_size, seed, config):
+    """Objective function to optimize when Scikit-learn regressors are used.
 
     Args:
-        X (_type_): data matrix
-        y (_type_): data labels (groundt ruth)
-        metric (_type_): the metric to optimize
+        X_train (_type_): the training set
+        y_train (_type_): the training label set
+        X_val (_type_): the validation set
+        y_val (_type_): the validation label set
+        window_size (_type_): the specified window size
+        seed (_type_): the seed for reproducibility
+        config (_type_): the configuration to explore
+
+    Returns:
+        _type_: the predicted y_val
+    """
+    # Get the prototype from the config
+    # (i.e., the order of the pre-processing transformations + the ML algorithm)
+    prototype = get_prototype(config)
+
+    # Instantiate the pipeline according to the current config
+    # (i.e., at each step we put an operator with specific hyper-parameters)
+    pipeline = instantiate_pipeline(prototype, seed, config)
+
+    # Normalization
+    X_train, y_train, X_val, y_val_scaler = normalize_data(
+        X_train, y_train, X_val, y_val, window_size
+    )
+
+    # Fit and prediction
+    estimator = pipeline.fit(X_train, y_train)
+    y_val_pred = estimator.predict(X_val)
+
+    # Inverse normalization
+    y_val_pred = denormalize_data(y_val_pred, y_val_scaler)
+
+    return y_val_pred
+
+
+def build_dnn(
+    input_count,
+    output_count,
+    neuron_count_per_hidden_layer,
+    activation,
+    last_activation,
+    dropout,
+    statistics,
+):
+    """Create the neural network architecture.
+
+    Args:
+        input_count (_type_): number of input neurons
+        output_count (_type_): number of output neurons
+        neuron_count_per_hidden_layer (_type_): number of neurons for each hidden layer
+        activation (_type_): activation function for the hidden layers
+        last_activation (_type_): activation funcion for the output layer
+        dropout (_type_): dropout rate
+        statistics (_type_): dictionary containing dataset statistics
+
+    Returns:
+        _type_: neural network model
+    """
+    model = keras.Sequential()
+    model.add(keras.layers.Input(shape=(input_count)))
+
+    # Normalization
+    model.add(
+        keras.layers.Lambda(normalization, arguments={"norm_parameters": statistics})
+    )
+
+    for n in neuron_count_per_hidden_layer:
+        model.add(keras.layers.Dense(n, activation=activation))
+        # model.add(keras.layers.Dropout(rate=dropout))
+
+    model.add(keras.layers.Dropout(rate=dropout))
+    model.add(keras.layers.Dense(output_count, activation=last_activation))
+
+    # Inverse normalization
+    model.add(
+        keras.layers.Lambda(
+            inverse_normalization, arguments={"norm_parameters": statistics}
+        )
+    )
+
+    return model
+
+
+def keras_objective(X_train, y_train, X_val, y_val, statistics, seed, config):
+    """Objective function to optimize when Keras NNs are used.
+
+    Args:
+        X_train (_type_): the training set
+        y_train (_type_): the training label set
+        X_val (_type_): the validation set
+        y_val (_type_): the validation label set
+        statistics (_type_): the dictionary containing dataset statistics
+        seed (_type_): the seed for reproducibility
+        config (_type_): the configuration to explore
+
+    Returns:
+        _type_: the predicted y_val
+    """
+    tf.random.set_seed(seed)
+
+    # Create the model
+    dnn = build_dnn(
+        X_train.shape[1],
+        y_train.shape[1],
+        eval(config["regression"]["neuron_count_per_hidden_layer"]),
+        config["regression"]["activation_function"],
+        config["regression"]["last_activation_function"],
+        config["regression"]["dropout"],
+        statistics,
+    )
+
+    # Compile the model
+    dnn.compile(
+        loss="mse",
+        optimizer=config["regression"]["optimizer"],
+        metrics=[tf.keras.metrics.RootMeanSquaredError()],
+    )
+
+    # Fit the model
+    patience = 50
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_loss", patience=patience, restore_best_weights=True
+    )
+    dnn.fit(
+        X_train,
+        y_train,
+        validation_data=(X_val, y_val),
+        epochs=config["regression"]["num_epochs"],
+        batch_size=config["regression"]["batch_size"],
+        shuffle=True,
+        callbacks=[early_stop],
+    )
+
+    # Prediciton
+    y_val_pred = dnn.predict(X_val)
+
+    return y_val_pred
+
+
+def objective(X_train, y_train, X_val, y_val, window_size, statistics, seed, config):
+    """Function to optimize (i.e., the order of the pre-processing transformations + the ML algorithm)
+
+    Args:
+        X_train (_type_): training data
+        y_train (_type_): training data labels (ground truth)
+        X_val (_type_): validation data
+        y_val (_type_): validation data labels (ground truth)
+        window_size (_type_): the specified window size
+        statistics (_type_): the dictionary containing dataset statistics
         seed (_type_): seed for reproducibility
         config (_type_): the current config to visit
 
@@ -118,35 +284,25 @@ def objective(X, y, metric, seed, config):
         _type_: dictionary with the result
     """
     # Set the result if the config failed to be evaluated
-    result = {metric: float("-inf"), "status": "fail"}
+    result = {"score": float("-inf"), "status": "fail"}
 
     try:
-        # Get the prototype from the config
-        # (i.e., the order of the pre-processing transformations + the ml algorithm)
-        prototype = get_prototype(config)
+        if config["regression"]["type"] == "keras":
+            y_val_pred = keras_objective(
+                X_train, y_train, X_val, y_val, statistics, seed, config
+            )
+        else:
+            y_val_pred = scikitlearn_objective(
+                X_train, y_train, X_val, y_val, window_size, seed, config
+            )
 
-        # Instantiate the pipeline according to the current config
-        # (i.e., at each step we put an operator with specific hyper-parameters)
-        pipeline = instantiate_pipeline(prototype, seed, config)
+        score = mean_squared_error(y_val, y_val_pred, squared=False)
 
-        # Evaluate it through 10-times cross-validation
-        scores = cross_validate(
-            pipeline,
-            X.copy(),
-            y.copy(),
-            scoring=[metric],
-            cv=10,
-            return_estimator=False,
-            return_train_score=False,
-            verbose=0,
-        )
-
-        # Get the metric value
-        result[metric] = np.mean(scores["test_" + metric])
+        result["score"] = score
 
         # If it is NaN, raise an exception
-        if np.isnan(result[metric]):
-            result[metric] = float("-inf")
+        if np.isnan(result["score"]):
+            result["score"] = float("-inf")
             raise Exception(f"The result for {config} was")
         result["status"] = "success"
 
