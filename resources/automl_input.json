@@ -7,6 +7,9 @@
     "regression": {
         "choice": [
             {
+                "type": "PersistentSystem"
+            },
+            {
                 "type": "MLPRegressor",
                 "hidden_layer_sizes": {
                     "choice": [

@@ -1,6 +1,7 @@
 # Scikit-learn provides a set of machine learning techniques
 import traceback
 import numpy as np
+import pandas as pd
 
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
@@ -17,6 +18,8 @@ from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import MinMaxScaler
 
 ## Regression algorithms
+from utils.persistent_system import PersistentSystem
+
 from sklearn.neural_network import MLPRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
@@ -45,6 +48,8 @@ from utils.data_acquisition import (
     inverse_normalization,
 )
 
+conf = 0  # configuration counter
+
 
 def get_prototype(config):
     """Create the prototype (i.e., the order of the pre-processing transformations + the ml algorithm)
@@ -66,7 +71,7 @@ def get_prototype(config):
     return ml_pipeline
 
 
-def instantiate_pipeline(prototype, seed, config):
+def instantiate_pipeline(prototype, seed, config, window_size, y_size):
     """Create the pipeline instantiation from the prototype
     Args:
         prototype (_type_): sequence of pre-processing steps
@@ -95,9 +100,13 @@ def instantiate_pipeline(prototype, seed, config):
                 operator_parameters["hidden_layer_sizes"]
             )
 
+        if config[step]["type"] == "PersistentSystem":
+            operator_parameters["window_size"] = window_size
+            operator_parameters["y_size"] = y_size
+            operator = globals()[config[step]["type"]](**operator_parameters)
         # Instantiate the operator/algorithm, if random_state is in the hyper-parameters
         # of the operator, add it
-        if "random_state" in globals()[config[step]["type"]]().get_params():
+        elif "random_state" in globals()[config[step]["type"]]().get_params():
             if "super_type" in config[step]:
                 operator = globals()[config[step]["super_type"]](
                     globals()[config[step]["type"]](
@@ -122,7 +131,9 @@ def instantiate_pipeline(prototype, seed, config):
     return Pipeline(pipeline)
 
 
-def scikitlearn_objective(X_train, y_train, X_val, y_val, window_size, seed, config):
+def scikitlearn_objective(
+    X_train, y_train, X_val, y_val, X_test, y_test, window_size, seed, config
+):
     """Objective function to optimize when Scikit-learn regressors are used.
 
     Args:
@@ -135,7 +146,7 @@ def scikitlearn_objective(X_train, y_train, X_val, y_val, window_size, seed, con
         config (_type_): the configuration to explore
 
     Returns:
-        _type_: the predicted y_val
+        _type_: the predicted y_train, y_val and y_test
     """
     # Get the prototype from the config
     # (i.e., the order of the pre-processing transformations + the ML algorithm)
@@ -143,21 +154,38 @@ def scikitlearn_objective(X_train, y_train, X_val, y_val, window_size, seed, con
 
     # Instantiate the pipeline according to the current config
     # (i.e., at each step we put an operator with specific hyper-parameters)
-    pipeline = instantiate_pipeline(prototype, seed, config)
+    pipeline = instantiate_pipeline(
+        prototype, seed, config, window_size, y_train.shape[1]
+    )
 
     # Normalization
-    X_train, y_train, X_val, y_val_scaler = normalize_data(
-        X_train, y_train, X_val, y_val, window_size
-    )
+    (
+        X_train,
+        y_train,
+        y_train_scaler,
+        X_val,
+        y_val_scaler,
+        X_test,
+        y_test_scaler,
+    ) = normalize_data(X_train, y_train, X_val, y_val, X_test, y_test, window_size)
 
     # Fit and prediction
     estimator = pipeline.fit(X_train, y_train)
+    y_train_pred = estimator.predict(X_train)
     y_val_pred = estimator.predict(X_val)
+    y_test_pred = estimator.predict(X_test)
 
     # Inverse normalization
-    y_val_pred = denormalize_data(y_val_pred, y_val_scaler)
+    y_train_pred, y_val_pred, y_test_pred = denormalize_data(
+        y_train_pred,
+        y_train_scaler,
+        y_val_pred,
+        y_val_scaler,
+        y_test_pred,
+        y_test_scaler,
+    )
 
-    return y_val_pred
+    return y_train_pred, y_val_pred, y_test_pred
 
 
 def build_dnn(
@@ -208,7 +236,7 @@ def build_dnn(
     return model
 
 
-def keras_objective(X_train, y_train, X_val, y_val, statistics, seed, config):
+def keras_objective(X_train, y_train, X_val, y_val, X_test, statistics, seed, config):
     """Objective function to optimize when Keras NNs are used.
 
     Args:
@@ -216,12 +244,13 @@ def keras_objective(X_train, y_train, X_val, y_val, statistics, seed, config):
         y_train (_type_): the training label set
         X_val (_type_): the validation set
         y_val (_type_): the validation label set
+        X_test (_type_): the test set
         statistics (_type_): the dictionary containing dataset statistics
         seed (_type_): the seed for reproducibility
         config (_type_): the configuration to explore
 
     Returns:
-        _type_: the predicted y_val
+        _type_: the predicted y_train, y_val and y_test
     """
     tf.random.set_seed(seed)
 
@@ -259,12 +288,26 @@ def keras_objective(X_train, y_train, X_val, y_val, statistics, seed, config):
     )
 
     # Prediciton
+    y_train_pred = dnn.predict(X_train)
     y_val_pred = dnn.predict(X_val)
+    y_test_pred = dnn.predict(X_test)
 
-    return y_val_pred
+    return y_train_pred, y_val_pred, y_test_pred
 
 
-def objective(X_train, y_train, X_val, y_val, window_size, statistics, seed, config):
+def objective(
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    X_test,
+    y_test,
+    window_size,
+    output_horizon,
+    statistics,
+    seed,
+    config,
+):
     """Function to optimize (i.e., the order of the pre-processing transformations + the ML algorithm)
 
     Args:
@@ -272,7 +315,10 @@ def objective(X_train, y_train, X_val, y_val, window_size, statistics, seed, con
         y_train (_type_): training data labels (ground truth)
         X_val (_type_): validation data
         y_val (_type_): validation data labels (ground truth)
+        X_test (_type_): test data
+        y_test (_type_): test data labels (ground truth)
         window_size (_type_): the specified window size
+        output_horizon (_type_): the specified output horizon in hours
         statistics (_type_): the dictionary containing dataset statistics
         seed (_type_): seed for reproducibility
         config (_type_): the current config to visit
@@ -283,28 +329,104 @@ def objective(X_train, y_train, X_val, y_val, window_size, statistics, seed, con
     Returns:
         _type_: dictionary with the result
     """
+    global conf
+
     # Set the result if the config failed to be evaluated
-    result = {"score": float("-inf"), "status": "fail"}
+    result = {
+        "train_raw_scores": {
+            f"train_raw_score_{sensor}": float("-inf")
+            for sensor in np.arange(0, output_horizon * 12)
+        },
+        "val_raw_scores": {
+            f"val_raw_score_{sensor}": float("-inf")
+            for sensor in np.arange(0, output_horizon * 12)
+        },
+        "test_raw_scores": {
+            f"test_raw_score_{sensor}": float("-inf")
+            for sensor in np.arange(0, output_horizon * 12)
+        },
+        "train_score": float("-inf"),
+        "val_score": float("-inf"),
+        "test_score": float("-inf"),
+        "status": "fail",
+    }
 
     try:
         if config["regression"]["type"] == "keras":
-            y_val_pred = keras_objective(
-                X_train, y_train, X_val, y_val, statistics, seed, config
+            y_train_pred, y_val_pred, y_test_pred = keras_objective(
+                X_train.to_numpy(),
+                y_train.to_numpy(),
+                X_val.to_numpy(),
+                y_val.to_numpy(),
+                X_test.to_numpy(),
+                statistics,
+                seed,
+                config,
             )
         else:
-            y_val_pred = scikitlearn_objective(
-                X_train, y_train, X_val, y_val, window_size, seed, config
+            y_train_pred, y_val_pred, y_test_pred = scikitlearn_objective(
+                X_train.to_numpy(),
+                y_train.to_numpy(),
+                X_val.to_numpy(),
+                y_val.to_numpy(),
+                X_test.to_numpy(),
+                y_test.to_numpy(),
+                window_size,
+                seed,
+                config,
             )
 
-        score = mean_squared_error(y_val, y_val_pred, squared=False)
+        # Export predictions to csv files
+        pd.DataFrame(y_train_pred, columns=y_train.columns, index=y_train.index).to_csv(
+            "resources/predictions/conf_{}_train.csv".format(conf)
+        )
+        pd.DataFrame(y_val_pred, columns=y_val.columns, index=y_val.index).to_csv(
+            "resources/predictions/conf_{}_val.csv".format(conf)
+        )
+        pd.DataFrame(y_test_pred, columns=y_test.columns, index=y_test.index).to_csv(
+            "resources/predictions/conf_{}_test.csv".format(conf)
+        )
 
-        result["score"] = score
+        # Compute raw RMSE (a value for each sensor)
+        train_raw_rmse = mean_squared_error(
+            y_train, y_train_pred, multioutput="raw_values", squared=False
+        )
+        for idx, rmse in enumerate(train_raw_rmse):
+            result["train_raw_scores"][f"train_raw_score_{idx}"] = rmse
 
-        # If it is NaN, raise an exception
-        if np.isnan(result["score"]):
-            result["score"] = float("-inf")
-            raise Exception(f"The result for {config} was")
+        val_raw_rmse = mean_squared_error(
+            y_val, y_val_pred, multioutput="raw_values", squared=False
+        )
+        for idx, rmse in enumerate(val_raw_rmse):
+            result["val_raw_scores"][f"val_raw_score_{idx}"] = rmse
+
+        test_raw_rmse = mean_squared_error(
+            y_test, y_test_pred, multioutput="raw_values", squared=False
+        )
+        for idx, rmse in enumerate(test_raw_rmse):
+            result["test_raw_scores"][f"test_raw_score_{idx}"] = rmse
+
+        # Compute average RMSE
+        result["train_score"] = mean_squared_error(y_train, y_train_pred, squared=False)
+        result["val_score"] = mean_squared_error(y_val, y_val_pred, squared=False)
+        result["test_score"] = mean_squared_error(y_test, y_test_pred, squared=False)
+
+        # If something is NaN, raise an exception
+        for metric in result:
+            if metric != "status" and metric != "conf":
+                if metric in ["train_raw_scores", "val_raw_scores", "test_raw_scores"]:
+                    for elem in result[metric]:
+                        if np.isnan(result[metric][elem]):
+                            result[metric][elem] = float("-inf")
+                            raise Exception(f"The result for {config} was")
+                else:
+                    if np.isnan(result[metric]):
+                        result[metric] = float("-inf")
+                        raise Exception(f"The result for {config} was")
         result["status"] = "success"
+        result["conf"] = conf
+
+        conf += 1
 
     except Exception as e:
         print(

@@ -18,7 +18,7 @@ def parse_args():
         "--stride",
         nargs="?",
         type=int,
-        required=False,
+        required=True,
         help="rolling window stride",
     )
     parser.add_argument(
@@ -76,6 +76,38 @@ def parse_args():
         type=int,
         required=True,
         help="seed for reproducibility",
+    )
+    parser.add_argument(
+        "-db_address",
+        "--db_address",
+        nargs="?",
+        type=str,
+        required=True,
+        help="IP address for DB",
+    )
+    parser.add_argument(
+        "-db_port",
+        "--db_port",
+        nargs="?",
+        type=int,
+        required=True,
+        help="port for DB",
+    )
+    parser.add_argument(
+        "-db_user",
+        "--db_user",
+        nargs="?",
+        type=str,
+        required=True,
+        help="user for DB",
+    )
+    parser.add_argument(
+        "-db_password",
+        "--db_password",
+        nargs="?",
+        type=str,
+        required=True,
+        help="password for DB",
     )
 
     args = parser.parse_args()

@@ -1,21 +1,25 @@
+import os
 import json
 import time
 import warnings
 
 warnings.filterwarnings("ignore")
 
+import pandas as pd
 import numpy as np
 
 from functools import partial
 from flaml import tune
 
 from utils.argparse import parse_args
-from utils.json_to_csv import json_to_csv
 from utils.data_acquisition import (
     load_agro_data_from_csv,
+    load_agro_data_from_db,
     create_rolling_window,
     train_val_test_split,
+    get_data_labels,
     compute_statistics,
+    plot_results,
 )
 from automl.optimization import objective
 from automl.space_loading import get_space
@@ -24,15 +28,28 @@ from automl.space_loading import get_space
 def main(args):
     np.random.seed(args.seed)
 
-    # Load the dataset
-    df = load_agro_data_from_csv()
+    # Load the datasets
+    train_data, val_data, test_data = load_agro_data_from_db(
+        args.db_address, args.db_port, args.db_user, args.db_password
+    )
 
-    # Create rolling window
-    rolling_window_df = create_rolling_window(df, args.window_size, args.stride)
+    # Create rolling windows
+    rolling_window_train_data = create_rolling_window(
+        train_data, args.window_size, args.stride
+    )
+    rolling_window_val_data = create_rolling_window(
+        val_data, args.window_size, args.stride
+    )
+    rolling_window_test_data = create_rolling_window(
+        test_data, args.window_size, args.stride
+    )
 
-    # Create train and test sets
-    X_train, y_train, X_val, y_val, X_test, y_test = train_val_test_split(
-        rolling_window_df, args.output_horizon, test_ratio=0.33, val_ratio=0.50
+    # Get data labels
+    X_train, y_train, X_val, y_val, X_test, y_test = get_data_labels(
+        rolling_window_train_data,
+        rolling_window_val_data,
+        rolling_window_test_data,
+        args.output_horizon,
     )
 
     # Compute statistics on the dataset
@@ -50,12 +67,15 @@ def main(args):
             y_train,
             X_val,
             y_val,
+            X_test,
+            y_test,
             args.window_size,
+            args.output_horizon,
             statistics,
             args.seed,
         ),
         config=space,
-        metric="score",
+        metric="val_score",
         mode="min",
         num_samples=args.batch_size,
         time_budget_s=1800,
@@ -65,7 +85,18 @@ def main(args):
     end_time = time.time()
 
     # Specify which information are needed for the output
-    filtered_keys = ["score", "status", "config", "time_total_s"]
+    filtered_keys = [
+        "train_raw_scores",
+        "val_raw_scores",
+        "test_raw_scores",
+        "train_score",
+        "val_score",
+        "test_score",
+        "status",
+        "conf",
+        "config",
+        "time_total_s",
+    ]
     # Prepare the output file
     automl_output = {
         "optimization_time": end_time - start_time,
@@ -90,8 +121,23 @@ def main(args):
     with open(args.output_path, "w") as outfile:
         json.dump(automl_output, outfile)
 
-    # Convert the result in csv
-    json_to_csv(automl_output=automl_output.copy(), args=args)
+    # Plot best result for each set
+    for set in ["train", "val", "test"]:
+        plot_results(
+            pd.read_csv(
+                os.path.join(
+                    "/",
+                    "home",
+                    "resources",
+                    "predictions",
+                    f"""conf_{automl_output["best_config"]["conf"]}_{set}.csv""",
+                )
+            ),
+            locals()[f"y_{set}"],
+            args.output_horizon,
+            set,
+            statistics,
+        )
 
 
 if __name__ == "__main__":
