@@ -6,16 +6,18 @@ import numpy as np
 import math
 import re
 
+from scipy.spatial import distance
+
 import matplotlib.pyplot as plt
 
 from sqlalchemy import create_engine
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 import tensorflow as tf
 
-filtered_db_sensors = []  # sensors list
+from utils.parameters import Parameters
 
 
 def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
@@ -52,6 +54,37 @@ def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
             dfs[0] = dfs[0].combine_first(dfs[minute])
         return dfs[0]
 
+    original_sensors = [
+        [0, 0, -0.2],
+        [0, 0, -0.4],
+        [0, 0, -0.6],
+        [0.3, 0, -0.2],
+        [0.3, 0, -0.4],
+        [0.3, 0, -0.6],
+        [0.6, 0, -0.2],
+        [0.6, 0, -0.4],
+        [0.6, 0, -0.6],
+        [0.9, 0, -0.2],
+        [0.9, 0, -0.4],
+        [0.9, 0, -0.6],
+    ]
+
+    filtered_sensors = [
+        [0, 0, -60],
+        [0, 0, -40],
+        [0, 0, -20],
+        [25, 0, -60],
+        [25, 0, -40],
+        [25, 0, -20],
+        [50, 0, -60],
+        [50, 0, -40],
+        [50, 0, -20],
+        [80, 0, -60],
+        [80, 0, -40],
+        [80, 0, -20],
+    ]
+    Parameters().set_params(original_sensors, filtered_sensors)
+
     data = {}
     for variable in [
         "air_temperature",
@@ -66,7 +99,7 @@ def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
         if variable == "ground_potential":
             data[variable] = _ground_potential_reconstruction(data[variable].copy())
             data[variable].columns = [
-                f"z{-column[0]}_y{column[1]}_x{column[2]}"
+                f"z{column[0]}_y{column[1]}_x{column[2]}"
                 for column in data[variable].columns.values
             ]
         else:
@@ -77,338 +110,344 @@ def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
     return result.fillna(method="ffill")
 
 
-def load_agro_data_from_db(db_address, db_port, db_user, db_password):
-    def _ground_potential_reconstruction(df):
-        """Ground potential data likely contains missing values.
-        Since this kind of data has to be treated properly, we define a custom imputation.
-        Data from sensors are sampled every 15 minutes, but we are interested in hourly sampling.
-        We are lucky if we have the data at the :00 of the hour at hand , bc we do not have to do nothing.
-        Otherwise, we take the value of the previous quarter (15 minutes before).
-        This is done until the minute :00 of the previous hour.
-
-        Args:
-            df (_type_): input dataframe
-
-        Returns:
-            _type_: output dataframe
-        """
-        dfs = {}
-        for minute in [0, 15, 30, 45]:
-            dfs[minute] = df[
-                df.apply(
-                    lambda x: pd.to_datetime(x["unix_timestamp"], unit="s").minute
-                    == minute,
-                    axis=1,
-                )
-            ]
-            if minute != 0:
-                dfs[minute]["unix_timestamp"] = (
-                    (dfs[minute]["unix_timestamp"] + 3600) / 3600
-                ).astype(int) * 3600
-            dfs[minute] = dfs[minute].pivot(
-                index="unix_timestamp", columns=["z", "y", "x"], values="value"
-            )
-        for minute in [45, 30, 15]:
-            dfs[0] = dfs[0].combine_first(dfs[minute])
-        return dfs[0]
-
-    # DB connection
+def open_db_connection(db_cfg):
     engine = create_engine(
         "postgresql://{user}:{password}@{address}:{db_port}/smart_irrigation".format(
-            user=db_user, password=db_password, address=db_address, db_port=db_port
+            user=db_cfg["db_user"],
+            password=db_cfg["db_password"],
+            address=db_cfg["db_address"],
+            db_port=db_cfg["db_port"],
         )
     )
-    connection = engine.connect()
+    return engine.connect()
+
+
+def close_db_connection(connection):
+    connection.close()
+
+
+def load_agro_data_from_db(run_cfg, db_cfg):
+    # Open DB connection
+    connection = open_db_connection(db_cfg)
 
     # Queries
-    arpae_query = "SELECT unix_timestamp, value_type_name, value \
+    years_scenarios_query = "SELECT scenario_name \
+        FROM synthetic_scenario_composed_scenario \
+		WHERE composed_scenario_name = '{}'"
+
+    arpae_query = "SELECT unix_timestamp, value_type_name, \
+        CASE \
+            WHEN value_type_name = 'RADIATIONS' AND value < 0 THEN 0 \
+            ELSE value \
+        END AS value \
         FROM synthetic_scenario_arpae_data \
         WHERE scenario_arpae_name IN (SELECT scenario_arpae_name \
-		FROM synthetic_scenario \
-		WHERE name = '{}') \
+            FROM synthetic_scenario \
+			WHERE name = '{}') \
         ORDER BY unix_timestamp ASC, value_type_name ASC"
 
     water_query = "SELECT unix_timestamp, value_type_name, value \
         FROM synthetic_scenario_water_data \
         WHERE scenario_water_name IN (SELECT scenario_water_name \
-		FROM synthetic_scenario \
-		WHERE name = '{}') \
+		    FROM synthetic_scenario \
+		    WHERE name = '{}') \
         ORDER BY unix_timestamp ASC, value_type_name ASC"
 
-    gp_query = "SELECT unix_timestamp, ROUND((x - 1)::numeric, 3) AS x, ROUND((y - 1)::numeric, 3) AS y, z, value \
+    gp_query = "SELECT unix_timestamp, ROUND(x::numeric, 3) AS x, ROUND(y::numeric, 3) AS y, z, value \
         FROM synthetic_data \
-        WHERE scenario_name='{}' \
+        WHERE scenario_name = '{}' \
         ORDER BY unix_timestamp ASC, x ASC, y ASC, z DESC"
 
-    sensors_query = "SELECT ROUND(x::numeric, 3) AS x, ROUND(z::numeric, 3) AS z \
-        FROM synthetic_sensor \
-        ORDER BY x ASC, z DESC"
+    sensors_query = "SELECT x, y, z \
+        FROM synthetic_sensor_arrangement ssa \
+        INNER JOIN synthetic_sensor ss \
+        ON ssa.sensor_name = ss.name \
+        WHERE arrangement_name = '{}' \
+        ORDER BY x ASC, y ASC, z DESC"
 
-    # Scenarios to consider
-    scenarios = [
-        "Real Martorano 2017 v.4.8",
-        "Real Martorano 2018 v.4.8",
-        "Real Martorano 2019 v.4.8",
-        "Real Martorano 2020 v.4.8",
-        "Real Bologna 2016 v.4.8",
-        "Real Bologna 2017 v.4.8",
-        "Real Bologna 2018 v.4.8",
-        "Real Bologna 2019 v.4.8",
-        "Real Fondo PROGETTO_1 v.4.8",
-    ]
+    frequent_sensors_query = "SELECT x, y, z, COUNT(*) AS freq \
+        FROM synthetic_data \
+        WHERE scenario_name = '{scenario}' \
+        GROUP BY x, y, z \
+        HAVING COUNT(*) > ( \
+            SELECT COUNT(DISTINCT unix_timestamp) / 4 \
+            FROM synthetic_data \
+            WHERE scenario_name = '{scenario}')"
 
-    # Get the scenarios data (weather data, watering data, ground potential data)
-    for scenario in scenarios:
-        scenario_name = re.sub(" |\.", "_", scenario.lower())
-        locals()[scenario_name + "_arpae_df"] = pd.read_sql(
-            arpae_query.format(scenario), connection
-        )
-        locals()[scenario_name + "_water_df"] = pd.read_sql(
-            water_query.format(scenario), connection
-        )
-        locals()[scenario_name + "_gp_df"] = pd.read_sql(
-            gp_query.format(scenario), connection
-        )
+    # Scenarios to consider for train, validation and test
+    scenarios_dict = {
+        run_cfg["scenario_names"]["train_scenario_name"]: [],
+        run_cfg["scenario_names"]["val_scenario_name"]: [],
+        run_cfg["scenario_names"]["test_scenario_name"]: [],
+    }
+    # Get the specific years scenarios for each scenario
+    for scenario in scenarios_dict:
+        years_scenario = pd.read_sql(years_scenarios_query.format(scenario), connection)
+        scenarios_dict[scenario] = years_scenario.values.flatten().tolist()
 
-        print(scenario)
+        # Get the scenarios data (weather data, watering data, ground potential data)
+        for year_scenario in scenarios_dict[scenario]:
+            year_scenario_name = re.sub(" |\.", "_", year_scenario.lower())
+            globals()[year_scenario_name + "_arpae_df"] = pd.read_sql(
+                arpae_query.format(year_scenario), connection
+            )
+            globals()[year_scenario_name + "_water_df"] = pd.read_sql(
+                water_query.format(year_scenario), connection
+            )
+            globals()[year_scenario_name + "_gp_df"] = pd.read_sql(
+                gp_query.format(year_scenario), connection
+            )
+
+            print(year_scenario)
 
     # Get the sensors coordinates
-    sensors_coordinates_df = pd.read_sql(sensors_query, connection)
-    sensors_coordinates_df.insert(
-        loc=1, column="y", value=np.repeat(0.0, len(sensors_coordinates_df))
+    sensors_coordinates_df = pd.read_sql(
+        sensors_query.format(run_cfg["arrangement"]), connection
     )
-    sensors = sensors_coordinates_df.to_numpy()
+    sensors_coordinates_df.sort_values(
+        ["x", "y", "z"], ascending=[True, True, False], inplace=True
+    )  # sort sensors in ascending order by x and y values and in descending order by z value
+    original_sensors = np.around(sensors_coordinates_df.to_numpy(), 2)
 
     # Get DB data sensors
-    db_sensors = locals()["real_martorano_2017_v_4_8_gp_df"].loc[
-        locals()["real_martorano_2017_v_4_8_gp_df"]["unix_timestamp"]
-        == locals()["real_martorano_2017_v_4_8_gp_df"]["unix_timestamp"][0],
-        "x":"z",
-    ]
-    db_sensors = db_sensors.to_numpy()
+    frequent_sensors_df = pd.read_sql(
+        frequent_sensors_query.format(
+            scenario=next(iter(scenarios_dict.items()))[1][0]
+        ),
+        connection,
+    )  # take the first batch of the training scenario samples
+    frequent_sensors_df = frequent_sensors_df.loc[:, "x":"z"]
+    frequent_sensors_df.sort_values(
+        ["x", "y", "z"], ascending=[True, True, False], inplace=True
+    )  # sort sensors in ascending order by x and y values and in descending order by z value
+    frequent_sensors = np.around(frequent_sensors_df.to_numpy(), 2)
+
+    # Close DB connection
+    close_db_connection(connection)
 
     # Filter sensors
-    for sensor in sensors:
-        min_diff = [math.inf, math.inf, math.inf]
-        for db_sensor in db_sensors:
-            diff = abs(sensor - db_sensor)
-            if (diff <= min_diff).all() or np.isclose(diff, min_diff).all():
-                min_diff = diff
-                best_approx_db_sensor = db_sensor
-        filtered_db_sensors.append(tuple(best_approx_db_sensor))
+    filtered_sensors = []
+    for original_sensor in original_sensors:
+        min_distance = math.inf
+        for sensor in frequent_sensors:
+            euclidean_distance = distance.euclidean(original_sensor, sensor)
+            if euclidean_distance <= min_distance or np.isclose(
+                euclidean_distance, min_distance
+            ):
+                min_distance = euclidean_distance
+                best_approx_sensor = sensor
+        filtered_sensors.append(tuple(best_approx_sensor))
+
+    Parameters().set_params(
+        original_sensors, filtered_sensors
+    )  # save sensors coordinates for later usage
 
     # Pivot and filter data
-    for scenario in scenarios:
-        scenario_name = re.sub(" |\.", "_", scenario.lower())
-        # Pivot weather and irrigation data
-        locals()[scenario_name + "_arpae_df"] = locals()[
-            scenario_name + "_arpae_df"
-        ].pivot(index="unix_timestamp", columns="value_type_name", values="value")
-        locals()[scenario_name + "_water_df"] = locals()[
-            scenario_name + "_water_df"
-        ].pivot(index="unix_timestamp", columns="value_type_name", values="value")
+    for scenario in scenarios_dict:
+        for year_scenario in scenarios_dict[scenario]:
+            year_scenario_name = re.sub(" |\.", "_", year_scenario.lower())
+            # Pivot weather and irrigation data
+            globals()[year_scenario_name + "_arpae_df"] = globals()[
+                year_scenario_name + "_arpae_df"
+            ].pivot(index="unix_timestamp", columns="value_type_name", values="value")
+            globals()[year_scenario_name + "_water_df"] = globals()[
+                year_scenario_name + "_water_df"
+            ].pivot(index="unix_timestamp", columns="value_type_name", values="value")
 
-        # Filter ground potetntial data
-        locals()[scenario_name + "_gp_df"] = locals()[scenario_name + "_gp_df"][
-            [
-                i in filtered_db_sensors
-                for i in zip(
-                    locals()[scenario_name + "_gp_df"].x,
-                    locals()[scenario_name + "_gp_df"].y,
-                    locals()[scenario_name + "_gp_df"].z,
-                )
+            # Filter ground potetntial data
+            globals()[year_scenario_name + "_gp_df"] = globals()[
+                year_scenario_name + "_gp_df"
+            ][
+                [
+                    i in filtered_sensors
+                    for i in zip(
+                        globals()[year_scenario_name + "_gp_df"].x,
+                        globals()[year_scenario_name + "_gp_df"].y,
+                        globals()[year_scenario_name + "_gp_df"].z,
+                    )
+                ]
             ]
-        ]
-        # Pivot ground potetntial data
-        locals()[scenario_name + "_gp_df"] = _ground_potential_reconstruction(
-            locals()[scenario_name + "_gp_df"]
-        )
-        locals()[scenario_name + "_gp_df"].columns = [
-            f"z{-column[0]}_y{column[1]}_x{column[2]}"
-            for column in locals()[scenario_name + "_gp_df"].columns.values
-        ]
-        locals()[scenario_name + "_gp_df"] = locals()[scenario_name + "_gp_df"].reindex(
-            sorted(locals()[scenario_name + "_gp_df"].columns, reverse=True), axis=1
-        )
+            # Pivot ground potential data
+            globals()[year_scenario_name + "_gp_df"] = globals()[
+                year_scenario_name + "_gp_df"
+            ].pivot(index="unix_timestamp", columns=["z", "y", "x"], values="value")
+            globals()[year_scenario_name + "_gp_df"].columns = [
+                f"z{column[0]}_y{column[1]}_x{column[2]}"
+                for column in globals()[year_scenario_name + "_gp_df"].columns.values
+            ]
+            globals()[year_scenario_name + "_gp_df"] = globals()[
+                year_scenario_name + "_gp_df"
+            ].reindex(
+                sorted(globals()[year_scenario_name + "_gp_df"].columns, reverse=True),
+                axis=1,
+            )
 
-        # Concatenate weather, watering and ground potential data
-        locals()[scenario_name + "_df"] = pd.concat(
-            [
-                locals()[scenario_name + "_arpae_df"],
-                locals()[scenario_name + "_water_df"],
-                locals()[scenario_name + "_gp_df"],
-            ],
-            axis=1,
-        )
+            # Concatenate weather, watering and ground potential data
+            globals()[year_scenario_name + "_df"] = pd.concat(
+                [
+                    globals()[year_scenario_name + "_arpae_df"],
+                    globals()[year_scenario_name + "_water_df"],
+                    globals()[year_scenario_name + "_gp_df"],
+                ],
+                axis=1,
+            )
 
-        print(scenario, " - Pivoted")
+            print(year_scenario, " - Pivoted")
+
+            # Imputation
+            globals()[year_scenario_name + "_df"] = (
+                globals()[year_scenario_name + "_df"]
+                .fillna(method="bfill")
+                .fillna(method="ffill")
+            )
+            # Rename columns
+            globals()[year_scenario_name + "_df"].index.names = ["unix_timestamp"]
+            globals()[year_scenario_name + "_df"].rename(
+                columns={
+                    "AIR_HUMIDITY": "air_humidity",
+                    "AIR_TEMPERATURE": "air_temperature",
+                    "RADIATIONS": "solar_radiation",
+                    "WIND_SPEED": "wind_speed",
+                    "IRRIGATIONS": "irrigation",
+                    "PRECIPITATIONS": "precipitation",
+                },
+                inplace=True,
+            )
+            # Reorder columns
+            cols = [
+                "air_temperature",
+                "air_humidity",
+                "wind_speed",
+                "solar_radiation",
+                "precipitation",
+                "irrigation",
+            ] + list(globals()[year_scenario_name + "_df"].columns[6:].values)
+            globals()[year_scenario_name + "_df"] = globals()[
+                year_scenario_name + "_df"
+            ][cols]
+
+            # Add and impute missing timestamps
+            min_timestamp = globals()[year_scenario_name + "_df"].index.min()
+            max_timestamp = globals()[year_scenario_name + "_df"].index.max()
+            timestamps_range = list(range(min_timestamp, max_timestamp + 1, 3600))
+            missing_timestamps = [
+                timestamp
+                for timestamp in globals()[year_scenario_name + "_df"].index
+                if timestamp not in timestamps_range
+            ]
+            for timestamp in missing_timestamps:
+                globals()[year_scenario_name + "_df"].loc[timestamp] = pd.Series(
+                    data=np.nan, index=globals()[year_scenario_name + "_df"].columns
+                )
+            globals()[year_scenario_name + "_df"].sort_index(inplace=True)
+            globals()[year_scenario_name + "_df"] = (
+                globals()[year_scenario_name + "_df"]
+                .fillna(method="bfill")
+                .fillna(method="ffill")
+            )
+
+            # Rename sensors columns to 'original' values
+            globals()[year_scenario_name + "_df"].rename(
+                columns={
+                    col: new_col
+                    for col, new_col in zip(
+                        Parameters().get_sensor_columns(),
+                        Parameters().get_original_sensor_columns(),
+                    )
+                },
+                inplace=True,
+            )
+
+            # Create rolling windows
+            globals()[year_scenario_name + "_df_rolled"] = create_rolling_window(
+                globals()[year_scenario_name + "_df"], run_cfg
+            )
 
     # Create train, validation and test sets
     train = pd.concat(
-        (
-            locals()["real_martorano_2017_v_4_8_df"],
-            locals()["real_martorano_2018_v_4_8_df"],
-            locals()["real_martorano_2019_v_4_8_df"],
-            locals()["real_martorano_2020_v_4_8_df"],
-        ),
+        [
+            globals()[re.sub(" |\.", "_", train_scenario.lower()) + "_df_rolled"]
+            for train_scenario in scenarios_dict[
+                run_cfg["scenario_names"]["train_scenario_name"]
+            ]
+        ],
         axis=0,
     )
     val = pd.concat(
-        (
-            locals()["real_bologna_2016_v_4_8_df"],
-            locals()["real_bologna_2017_v_4_8_df"],
-            locals()["real_bologna_2018_v_4_8_df"],
-            locals()["real_bologna_2019_v_4_8_df"],
-        ),
+        [
+            globals()[re.sub(" |\.", "_", val_scenario.lower()) + "_df_rolled"]
+            for val_scenario in scenarios_dict[
+                run_cfg["scenario_names"]["val_scenario_name"]
+            ]
+        ],
         axis=0,
     )
-    test = locals()["real_fondo_progetto_1_v_4_8_df"]
-
-    for dataset in ["train", "val", "test"]:
-        # Imputation
-        locals()[dataset] = (
-            locals()[dataset].fillna(method="bfill").fillna(method="ffill")
-        )
-        # Rename columns
-        locals()[dataset].index.names = ["timestamp"]
-        locals()[dataset].rename(
-            columns={
-                "AIR_HUMIDITY": "air_humidity",
-                "AIR_TEMPERATURE": "air_temperature",
-                "RADIATIONS": "solar_radiation",
-                "WIND_SPEED": "wind_speed",
-                "IRRIGATIONS": "irrigation",
-                "PRECIPITATIONS": "precipitation",
-            },
-            inplace=True,
-        )
-        # Reorder columns
-        cols = [
-            "air_temperature",
-            "air_humidity",
-            "wind_speed",
-            "solar_radiation",
-            "precipitation",
-            "irrigation",
-        ] + list(locals()[dataset].columns[6:].values)
-        locals()[dataset] = locals()[dataset][cols]
+    test = pd.concat(
+        [
+            globals()[re.sub(" |\.", "_", test_scenario.lower()) + "_df_rolled"]
+            for test_scenario in scenarios_dict[
+                run_cfg["scenario_names"]["test_scenario_name"]
+            ]
+        ],
+        axis=0,
+    )
 
     return train, val, test
 
 
-def compute_statistics(window_size):
-    """Set min and max values for each variable.
-
-    Args:
-        window_size (_type_): the specified window size
-
-    Returns:
-        _type_: a dictionary containing dataset statistics
-    """
-    statistics = {}
-
-    # air temperature, air humidity, wind speed, solar radiation, precipitation, irrigation
-    min_w_values = [-10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    max_w_values = [40.0, 100.0, 15.0, 1000.0, 20.0, 6.0]
-
-    # ground_potential
-    min_gp_value = [-1500.0]
-    max_gp_value = [0.0]
-
-    statistics["min"] = tf.convert_to_tensor(
-        np.concatenate(
-            (
-                np.repeat(min_w_values, window_size),
-                np.repeat(min_gp_value, window_size * 12),
-            )
-        ),
-        dtype=tf.float32,
-    )
-    statistics["max"] = tf.convert_to_tensor(
-        np.concatenate(
-            (
-                np.repeat(max_w_values, window_size),
-                np.repeat(max_gp_value, window_size * 12),
-            )
-        ),
-        dtype=tf.float32,
-    )
-
-    return statistics
-
-
-def create_rolling_window(df, window_size, stride=1):
-    """Create the rolling window, according to the specified window size and stride.
+def create_rolling_window(df, run_cfg):
+    """Create the rolling window.
 
     Args:
         df (_type_): input dataset
-        window_size (_type_): the specified window size
-        stride (_type_, optional): the specified window stride. Defaults to 1.
+        run_cfg (_type_): configuration information for the current run
 
     Returns:
         _type_: rolling window dataset
     """
-    if window_size < 2 or (stride < 1):
-        print(
-            "The window size and the stride must be greater than 1 and 0 respectively!"
+    n_hours_ahead = run_cfg["window_parameters"]["n_hours_ahead"]
+    n_hour_past = run_cfg["window_parameters"]["n_hours_past"]
+    stride_ahead = run_cfg["window_parameters"]["stride_ahead"]
+    stride_past = run_cfg["window_parameters"]["stride_past"]
+
+    sensor_columns = Parameters().get_original_sensor_columns()
+
+    agg_dict = {}
+    for column in Parameters().get_weather_columns():
+        agg_dict[column] = "mean"
+    for column in Parameters().get_watering_columns():
+        agg_dict[column] = "sum"
+
+    ahead_indexer = pd.api.indexers.FixedForwardWindowIndexer(window_size=stride_ahead)
+    ahead_df = df.rolling(ahead_indexer).agg(agg_dict)
+
+    for column in sensor_columns:
+        agg_dict[column] = lambda rows: rows.iloc[-1]
+
+    past_df = df.rolling(stride_past).agg(agg_dict)
+
+    rolling_window = []
+    for past_hours in range(
+        0,
+        n_hour_past,
+        stride_past,
+    ):
+        rolling_window.append(
+            past_df.shift(past_hours).add_suffix(f"_p{past_hours+stride_past}")
         )
-    else:
-        m_var_names = list(
-            df.columns[:4]
-        )  # air_temperature, air_humidity, wind_speed, solar_radiation
-        w_var_names = list(df.columns[4:6])  # precipitation, irrigation
-        gp_var_names = list(df.columns[6:])  # ground potential
+    rolling_window.reverse()
+    # rolling_window.append(df)
+    for ahead_hours in range(0, n_hours_ahead, stride_ahead):
+        rolling_window.append(
+            ahead_df.shift(-ahead_hours).add_suffix(f"_a{ahead_hours+stride_ahead}")
+        )
+    rolling_window.append(
+        df.shift(-n_hours_ahead)[sensor_columns].add_suffix(f"_a{n_hours_ahead}")
+    )
+    rolling_window_df = pd.concat(rolling_window, axis=1, join="inner")
+    rolling_window_df = rolling_window_df.dropna()
 
-        if stride > 1:
-            # Compute aggregations
-            m_var_agg = df[m_var_names].resample(f"{stride}H").mean()
-            w_var_agg = df[w_var_names].resample(f"{stride}H").sum()
-            gp_var_agg = df[gp_var_names].resample(f"{stride}H").last()
-
-            df = pd.concat([m_var_agg, w_var_agg, gp_var_agg], axis=1)
-
-            # Adjust the window size according to the stride
-            window_size = math.ceil(window_size / stride)
-
-        # Create rolling window template
-        for step in np.arange(1, window_size):
-            for idx, var in enumerate(m_var_names + w_var_names, start=1):
-                df.insert(
-                    loc=int(step) * idx + (idx - 1),
-                    column=f"{var}_{step}",
-                    value=np.nan,
-                )
-            for var in gp_var_names:
-                df[f"{var}_{step}"] = np.nan
-
-        # Row indexes reset for the following computations
-        timestamps = list(df.index)
-        df.reset_index(drop=True, inplace=True)
-
-        # Populate rolling window
-        try:
-            for idx, _ in df.iterrows():
-                for var in m_var_names + w_var_names:
-                    df.loc[idx, f"{var}_1":f"{var}_{window_size - 1}"] = df.loc[
-                        idx + 1 : idx + window_size - 1, var
-                    ].values
-                for step in np.arange(1, window_size):
-                    df.loc[
-                        idx, f"{gp_var_names[0]}_{step}":f"{gp_var_names[-1]}_{step}"
-                    ] = df.loc[
-                        idx + step, f"{gp_var_names[0]}":f"{gp_var_names[-1]}"
-                    ].values
-        except (KeyError, ValueError):
-            print()
-
-        # Restore previous row indexes
-        df["timestamp"] = timestamps
-        df.set_index("timestamp", inplace=True)
-
-        # Remove rows with NaN values
-        df.dropna(inplace=True)
-
-        return df
+    return rolling_window_df
 
 
 # To be used with "local" data
@@ -448,6 +487,18 @@ def train_val_test_split(
             X_train, y_train, test_size=val_ratio, random_state=42, shuffle=shuffle
         )
 
+    X_train = pd.DataFrame(
+        X_train, columns=X.columns, index=X.iloc[: len(X_train), :].index
+    )
+    X_val = pd.DataFrame(
+        X_val,
+        columns=X.columns,
+        index=X.iloc[len(X_train) : len(X_train) + len(X_val), :].index,
+    )
+    X_test = pd.DataFrame(
+        X_test, columns=X.columns, index=X.iloc[-len(X_test) :, :].index
+    )
+
     y_train = pd.DataFrame(
         y_train, columns=y.columns, index=y.iloc[: len(y_train), :].index
     )
@@ -463,33 +514,32 @@ def train_val_test_split(
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def get_data_labels(train_data, val_data, test_data, output_horizon):
+def get_data_labels(train_data, val_data, test_data):
     """Split the given datasets to obtain the samples and the corresponding labels.
 
     Args:
         train_data (_type_): the training data
         val_data (_type_): the validation data
         test_data (_type_): the test data
-        output_horizon (_type_): the specified output horizon in hours
 
     Returns:
         _type_: X_train is the training set, y_train is the training label set,
                 X_val is the validation set, y_val is the validation label set,
                 X_test is the test set, y_test is the test label set
     """
-    X_train = train_data.iloc[:, : -output_horizon * 12]
-    y_train = train_data.iloc[:, -output_horizon * 12 :]
+    X_train = train_data.iloc[:, :-12]
+    y_train = train_data.iloc[:, -12:]
 
-    X_val = val_data.iloc[:, : -output_horizon * 12]
-    y_val = val_data.iloc[:, -output_horizon * 12 :]
+    X_val = val_data.iloc[:, :-12]
+    y_val = val_data.iloc[:, -12:]
 
-    X_test = test_data.iloc[:, : -output_horizon * 12]
-    y_test = test_data.iloc[:, -output_horizon * 12 :]
+    X_test = test_data.iloc[:, :-12]
+    y_test = test_data.iloc[:, -12:]
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def normalize_data(X_train, y_train, X_val, y_val, X_test, y_test, window_size):
+def normalize_data(X_train, y_train, X_val, X_test):
     """Normalization function used for Scikit-learn regressors.
     MinMaxScaler is used.
 
@@ -497,129 +547,77 @@ def normalize_data(X_train, y_train, X_val, y_val, X_test, y_test, window_size):
         X_train (_type_): the training set
         y_train (_type_): the training label set
         X_val (_type_): the validation set
-        y_val (_type_): the validation label set
         X_test (_type_): the test set
-        y_test (_type_): the test label set
-        window_size (_type_): the specified window size
 
     Returns:
         _type_: the normalized X_train, y_train, X_val and X_test sets,
-                the y_train_scaler, y_val scaler and y_test_scaler scalers
+                the y_train scaler
     """
-    X_train_mv_scaler = MinMaxScaler().fit(X_train[:, : window_size * 6])
-    X_train_mv = X_train_mv_scaler.transform(X_train[:, : window_size * 6])
-
-    X_train_gpv_scaler = MinMaxScaler().fit(X_train[:, window_size * 6 :])
-    X_train_gpv = X_train_gpv_scaler.transform(X_train[:, window_size * 6 :])
-
-    X_val_mv_scaler = MinMaxScaler().fit(X_val[:, : window_size * 6])
-    X_val_mv = X_val_mv_scaler.transform(X_val[:, : window_size * 6])
-
-    X_val_gpv_scaler = MinMaxScaler().fit(X_val[:, window_size * 6 :])
-    X_val_gpv = X_val_gpv_scaler.transform(X_val[:, window_size * 6 :])
-
-    X_test_mv_scaler = MinMaxScaler().fit(X_test[:, : window_size * 6])
-    X_test_mv = X_test_mv_scaler.transform(X_test[:, : window_size * 6])
-
-    X_test_gpv_scaler = MinMaxScaler().fit(X_test[:, window_size * 6 :])
-    X_test_gpv = X_test_gpv_scaler.transform(X_test[:, window_size * 6 :])
+    X_scaler = StandardScaler().fit(X_train)
+    X_train = X_scaler.transform(X_train)
+    X_val = X_scaler.transform(X_val)
+    X_test = X_scaler.transform(X_test)
 
     ######
 
-    y_train_scaler = MinMaxScaler().fit(y_train)
-    y_train = y_train_scaler.transform(y_train)
+    y_scaler = StandardScaler().fit(y_train)
+    y_train = y_scaler.transform(y_train)
 
-    y_val_scaler = MinMaxScaler().fit(y_val)
-
-    y_test_scaler = MinMaxScaler().fit(y_test)
-
-    ######
-
-    X_train = np.concatenate(
-        (X_train_mv, X_train_gpv),
-        axis=1,
-    )
-
-    X_val = np.concatenate(
-        (X_val_mv, X_val_gpv),
-        axis=1,
-    )
-
-    X_test = np.concatenate(
-        (X_test_mv, X_test_gpv),
-        axis=1,
-    )
-
-    return X_train, y_train, y_train_scaler, X_val, y_val_scaler, X_test, y_test_scaler
+    return X_train, y_train, X_val, X_test, y_scaler
 
 
-def denormalize_data(
-    y_train_pred, y_train_scaler, y_val_pred, y_val_scaler, y_test_pred, y_test_scaler
-):
+def denormalize_data(y_train_pred, y_val_pred, y_test_pred, y_scaler):
     """Inverse normalization function used for Scikit-learn regressors.
 
     Args:
         y_train_pred (_type_): the predictions for y_train set
-        y_train_scaler (_type_): the y_train scaler
         y_val_pred (_type_): the predictions for y_val set
-        y_val_scaler (_type_): the y_val scaler
         y_test_pred (_type_): the predictions for y_test set
-        y_test_scaler (_type_): the y_test scaler
+        y_scaler (_type_): the y_train scaler
 
     Returns:
         _type_: the de-normalized y_train, y_val and y_test sets
     """
     return (
-        y_train_scaler.inverse_transform(y_train_pred),
-        y_val_scaler.inverse_transform(y_val_pred),
-        y_test_scaler.inverse_transform(y_test_pred),
+        y_scaler.inverse_transform(y_train_pred),
+        y_scaler.inverse_transform(y_val_pred),
+        y_scaler.inverse_transform(y_test_pred),
     )
 
 
-def normalization(tensor, norm_parameters):
+def normalization(tensor, X_scaler):
     """Normalization function used for Keras NNs.
     MinMaxScaler is implemented.
 
     Args:
         tensor (_type_): the input tensor
-        norm_parameters (_type_): a dictionary containing the parameters required for normalization
+        X_scaler (_type_): the scaler used to normalize train samples
 
     Returns:
         _type_: the normalized tensor
     """
-    size = tensor.get_shape()[1]
-    normalized_tensor = tf.divide(
-        tf.subtract(tensor, norm_parameters["min"][:size]),
-        tf.subtract(
-            norm_parameters["max"][:size],
-            norm_parameters["min"][:size],
-        ),
+    normalized_tensor = tf.convert_to_tensor(
+        X_scaler.transform(tensor.numpy()),
+        dtype=tf.float32,
     )
     return replace_with_zeros(normalized_tensor)
 
 
-def inverse_normalization(tensor, norm_parameters):
+def inverse_normalization(tensor, y_scaler):
     """Inverse normalization function used for Keras NNs.
 
     Args:
         tensor (_type_): the input tensor
-        norm_parameters (_type_): a dictionary containing the parameters required for de-normalization
+        y_scaler (_type_): the scaler used to normalize train labels
 
     Returns:
         _type_: the de-normalized tensor
     """
-    size = tensor.get_shape()[1]
-    normalized_tensor = tf.add(
-        tf.multiply(
-            tensor,
-            tf.subtract(
-                norm_parameters["max"][-size:],
-                norm_parameters["min"][-size:],
-            ),
-        ),
-        norm_parameters["min"][-size:],
+    denormalized_tensor = tf.convert_to_tensor(
+        y_scaler.inverse_transform(tensor.numpy()), dtype=tf.float32
     )
-    return replace_with_zeros(normalized_tensor)
+
+    return replace_with_zeros(denormalized_tensor)
 
 
 def replace_with_zeros(normalized_tensor):
@@ -631,57 +629,32 @@ def replace_with_zeros(normalized_tensor):
     )
 
 
-def plot_results(best_predictions, ground_truth, output_horizon, set_name, statistics):
+def plot_results(best_predictions, ground_truth, set_name, hours_ahead, output_path):
     """Plot the best configuration result for each sensor.
 
     Args:
         best_predictions (_type_): the predictions of the best configuration found
         ground_truth (_type_): the ground truth
-        output_horizon (_type_): the specified output horizon in hours
         set_name (_type_): the set to consider for the plot
-        statistics (_type_): the dictionary containing dataset statistics
+        hours_ahead (_type_): the specified hours ahead considered for each sample
+        output_path (_type_): the output path where to save the plots
     """
     best_predictions = best_predictions.add_suffix("_pred")
-    best_predictions.set_index("timestamp_pred", inplace=True)
-
     result = pd.concat([best_predictions, ground_truth], axis=1, join="inner")
 
-    # Extract hours ahead considered in the predictions
-    hours_ahead = set()
-    for elem in ground_truth.columns:
-        hours_ahead.add(elem[elem.rindex("_") + 1 :])
-    hours_ahead = list(hours_ahead)
-    hours_ahead.sort()
-
-    # Extract sensors coordinates
-    global filtered_db_sensors
-    x_coords = list(set(np.array(filtered_db_sensors)[:, 0]))
-    x_coords.sort()
-    y_coords = list(set(np.array(filtered_db_sensors)[:, 1]))
-    y_coords.sort()
-    z_coords = list(set(np.array(filtered_db_sensors)[:, 2] * -1))
-    z_coords.sort()
-
     # Create plot
-    nrows = 3
-    ncols = 4
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols * output_horizon)
-    fig.set_size_inches(24, 12, forward=True)
-    for idh, h in enumerate(hours_ahead):
-        for idz, z in enumerate(z_coords):
-            for _, y in enumerate(y_coords):
-                for idx, x in enumerate(x_coords):
-                    result[[f"z{z}_y{y}_x{x}_{h}", f"z{z}_y{y}_x{x}_{h}_pred"]].plot(
-                        ax=axes[idz, idx + (ncols * idh)]
-                    )
-                    axes[idz, idx + (ncols * idh)].set_title(
-                        f"z{z}_y{y}_x{x} - {h} h ahead"
-                    )
-                    axes[idz, idx + (ncols * idh)].set_ylim(
-                        [
-                            int(statistics["min"][-1].numpy()),
-                            int(statistics["max"][-1].numpy()),
-                        ]
-                    )
+    fig, axes = plt.subplots(nrows=3, ncols=4)
+    fig.set_size_inches(24, 18, forward=True)
+    for idz, z in enumerate(Parameters().get_original_z_coords()):
+        for _, y in enumerate(Parameters().get_original_y_coords()):
+            for idx, x in enumerate(Parameters().get_original_x_coords()):
+                result[
+                    [
+                        f"z{z}_y{y}_x{x}_a{hours_ahead}",
+                        f"z{z}_y{y}_x{x}_a{hours_ahead}_pred",
+                    ]
+                ].plot(ax=axes[idz, idx])
+                axes[idz, idx].set_title(f"z{z}_y{y}_x{x} - {hours_ahead} h ahead")
+                axes[idz, idx].set_ylim([-1500.0, 0.0])
 
-    plt.savefig(os.path.join("/", "home", "resources", f"{set_name}_best_results.png"))
+    plt.savefig(os.path.join(output_path, f"{set_name}_best_results.png"))

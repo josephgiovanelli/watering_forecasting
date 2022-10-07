@@ -1,9 +1,10 @@
+import os
 import json
 from flaml import tune
 
 
 def get_space(path):
-    return _get_space(load_file(path))
+    return _get_space(load_file(os.path.join(path)))
 
 
 def load_file(path):

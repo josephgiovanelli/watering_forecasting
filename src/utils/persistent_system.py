@@ -1,22 +1,34 @@
-import numpy as np
+import pandas as pd
+
+from utils.parameters import Parameters
 
 """Class implementing the "Persistent System" behaviour.
 """
 
 
 class PersistentSystem:
-    def __init__(self, window_size, y_size):
-        self.window_size = window_size
-        self.y_size = y_size
+    def __init__(self, columns, stride_past):
+        self.columns = columns
+        self.stride_past = stride_past
 
     def fit(self, X_train, y_train):
         return self
 
     def predict(self, dataset):
-        predictions = np.ndarray(shape=(dataset.shape[0], self.y_size))
+        df = pd.DataFrame(data=dataset, columns=self.columns)
+        predictions = df[
+            [
+                sensor + f"_p{self.stride_past}"
+                for sensor in Parameters().get_original_sensor_columns()
+            ]
+        ]
 
-        for i in range(0, predictions.shape[0]):
-            for j in range(0, predictions.shape[1]):
-                predictions[i][j] = dataset[i][self.window_size * 6 + j]
+        return predictions.to_numpy()
 
-        return predictions
+    def set_params(self, **parameters):
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        return self
+
+    def get_params(self, deep=True):
+        return {"columns": self.columns, "stride_past": self.stride_past}

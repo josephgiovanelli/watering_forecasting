@@ -1,0 +1,88 @@
+{
+    "prototype": {
+        "choice": [
+            "normalization_regression"
+        ]
+    },
+    "normalization": {
+        "choice": [
+            {
+                "type": "StandardScaler"
+            }
+        ]
+    },
+    "regression": {
+        "choice": [
+            {
+                "type": "FeedForward",
+                "num_epochs": {
+                    "randint": [
+                        1,
+                        500
+                    ]
+                },
+                "batch_size": {
+                    "choice": [
+                        1,
+                        16,
+                        32,
+                        64,
+                        128,
+                        256,
+                        512
+                    ]
+                },
+                "neuron_count_per_hidden_layer": {
+                    "choice": [
+                        "[256, 256]",
+                        "[128, 128]",
+                        "[64, 64]",
+                        "[32, 32]",
+                        "[16, 16]",
+                        "[256, 256, 256]",
+                        "[128, 128, 128]",
+                        "[64, 64, 64]",
+                        "[32, 32, 32]",
+                        "[16, 16, 16]",
+                        "[128, 64, 128]",
+                        "[128, 64, 32, 64, 128]",
+                        "[256, 128, 64, 128, 256]",
+                        "[256, 128, 64, 32, 64, 128, 256]"
+                    ]
+                },
+                "dropout": {
+                    "quniform": [
+                        0.0,
+                        0.9,
+                        0.1
+                    ]
+                },
+                "activation_function": {
+                    "choice": [
+                        "sigmoid",
+                        "tanh",
+                        "ReLU",
+                        "softmax"
+                    ]
+                },
+                "last_activation_function": {
+                    "choice": [
+                        "sigmoid",
+                        "tanh",
+                        "ReLU",
+                        "softmax"
+                    ]
+                },
+                "optimizer": {
+                    "choice": [
+                        "SGD",
+                        "Adagrad",
+                        "RMSProp",
+                        "Adadelta",
+                        "Adam"
+                    ]
+                }
+            }
+        ]
+    }
+}

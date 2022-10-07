@@ -4,35 +4,25 @@ import utils.istarmap  # import to apply patch
 from multiprocessing import Pool
 from tqdm import tqdm
 
-
-def create_directory(directory_path):
-    """Create a directory.
-
-    Args:
-        directory_path (str, bytes or os.PathLike object): path to the directory to create.
-    """
-    if not os.path.exists(directory_path):
-        os.makedirs(directory_path)
+from run_generator import generate_runs
 
 
-def create_commands(num_tasks):
-    """Generate: the commands to run, the path where to save the std out, the path where to save the std error.
+def create_commands(runs):
+    """Generate: the commands to run, the path where to save the std out, the path where to save the std err.
 
     Args:
-        num_tasks (int): number of tasks to generate.
+        runs (int): the runs to consider.
 
     Returns:
         list[tuple]: each element of the list contains a tuple with (cmd, std_out, std_err).
     """
-    common_path = os.path.join("resources", "run_experiments_trial")
-    create_directory(common_path)
     return [
         (
-            f"python src/alternative_main.py --task_number {task_number}",
-            os.path.join(common_path, f"std_out_{task_number}.txt"),
-            os.path.join(common_path, f"std_err_{task_number}.txt"),
+            f"""python src/main.py --run_directory_path {os.path.join("outcomes", run)} --config_file_path {os.path.join("outcomes", run, f"config_{run.split('_', 1)[1]}.yaml")} --db_credentials_file_path {os.path.join("resources", "db_credentials.yaml")}""",
+            os.path.join("outcomes", run, "logs", f"std_out.txt"),
+            os.path.join("outcomes", run, "logs", f"std_err.txt"),
         )
-        for task_number in range(1, num_tasks + 1)
+        for run in runs
     ]
 
 
@@ -51,12 +41,15 @@ def run_cmd(cmd, stdout_path, stderr_path):
             subprocess.call(cmd, stdout=log_out, stderr=log_err, bufsize=0, shell=True)
 
 
+# Generate the runs to consider
+runs = generate_runs()
+
 # Variables for the example at hand
-num_tasks = 24
+num_tasks = len(runs)
 pool_size = 8
 
-# Generates the command to run
-commands = create_commands(num_tasks)
+# Generate the command to run
+commands = create_commands(runs)
 
 # Create the progress bar (num_tasks to execute)
 with tqdm(total=num_tasks) as pbar:

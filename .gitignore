@@ -153,5 +153,17 @@ cython_debug/
 
 # Custom
 
-.resources
-resources/
+.outcomes
+outcomes/
+
+.resources/debug/automl_output.json
+resources/debug/automl_output.json
+
+.resources/debug/*.png
+resources/debug/*.png
+
+.resources/debug/predictions/*
+resources/debug/predictions/*
+
+.resources/db_credentials.yaml
+resources/db_credentials.yaml

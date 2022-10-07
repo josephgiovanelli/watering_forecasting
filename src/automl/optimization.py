@@ -1,4 +1,4 @@
-# Scikit-learn provides a set of machine learning techniques
+import os
 import traceback
 import numpy as np
 import pandas as pd
@@ -15,11 +15,15 @@ from sklearn.impute import SimpleImputer
 from sklearn.impute import IterativeImputer
 
 ## Normalization operators
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.preprocessing import StandardScaler
+
+from utils.parameters import Parameters
 
 ## Regression algorithms
 from utils.persistent_system import PersistentSystem
 
+from sklearn.linear_model import LinearRegression
 from sklearn.neural_network import MLPRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
@@ -71,7 +75,7 @@ def get_prototype(config):
     return ml_pipeline
 
 
-def instantiate_pipeline(prototype, seed, config, window_size, y_size):
+def instantiate_pipeline(prototype, seed, config, columns, stride_past):
     """Create the pipeline instantiation from the prototype
     Args:
         prototype (_type_): sequence of pre-processing steps
@@ -92,37 +96,38 @@ def instantiate_pipeline(prototype, seed, config, window_size, y_size):
             if param_name == "base_estimator"  #
             else config[step][param_name]  #
             for param_name in config[step]
-            if param_name != "super_type" and param_name != "type"
+            if param_name != "meta_estimator"
+            and param_name != "super_type"
+            and param_name != "type"
         }
 
         if config[step]["type"] == "MLPRegressor":
             operator_parameters["hidden_layer_sizes"] = eval(
                 operator_parameters["hidden_layer_sizes"]
             )
-
         if config[step]["type"] == "PersistentSystem":
-            operator_parameters["window_size"] = window_size
-            operator_parameters["y_size"] = y_size
-            operator = globals()[config[step]["type"]](**operator_parameters)
+            operator_parameters["columns"] = columns
+            operator_parameters["stride_past"] = stride_past
+
         # Instantiate the operator/algorithm, if random_state is in the hyper-parameters
         # of the operator, add it
-        elif "random_state" in globals()[config[step]["type"]]().get_params():
-            if "super_type" in config[step]:
-                operator = globals()[config[step]["super_type"]](
-                    globals()[config[step]["type"]](
-                        random_state=seed, **operator_parameters
-                    )
-                )
-            else:
-                operator = globals()[config[step]["type"]](
-                    random_state=seed, **operator_parameters
-                )
-        elif "super_type" in config[step]:
-            operator = globals()[config[step]["super_type"]](
-                globals()[config[step]["type"]](**operator_parameters)
+        if (
+            "random_state"
+            in globals()[config[step]["type"]](**operator_parameters).get_params()
+        ):
+            operator = globals()[config[step]["type"]](
+                random_state=seed, **operator_parameters
             )
         else:
             operator = globals()[config[step]["type"]](**operator_parameters)
+        # If a super type or a meta estimator is defined, add it
+        if "super_type" in config[step]:
+            operator = globals()[config[step]["super_type"]](operator)
+        if "meta_estimator" in config[step]:
+            operator = globals()[config[step]["meta_estimator"]](
+                regressor=operator,
+                transformer=globals()[config["normalization"]["type"]](),
+            )
 
         # Add the operator to the array
         pipeline.append([step, operator])
@@ -132,7 +137,7 @@ def instantiate_pipeline(prototype, seed, config, window_size, y_size):
 
 
 def scikitlearn_objective(
-    X_train, y_train, X_val, y_val, X_test, y_test, window_size, seed, config
+    X_train, y_train, X_val, y_val, X_test, y_test, stride_past, seed, config
 ):
     """Objective function to optimize when Scikit-learn regressors are used.
 
@@ -141,7 +146,9 @@ def scikitlearn_objective(
         y_train (_type_): the training label set
         X_val (_type_): the validation set
         y_val (_type_): the validation label set
-        window_size (_type_): the specified window size
+        X_test (_type_): the test set
+        y_test (_type_): the test label set
+        stride_past (_type_): the specified stride for past observations
         seed (_type_): the seed for reproducibility
         config (_type_): the configuration to explore
 
@@ -155,35 +162,35 @@ def scikitlearn_objective(
     # Instantiate the pipeline according to the current config
     # (i.e., at each step we put an operator with specific hyper-parameters)
     pipeline = instantiate_pipeline(
-        prototype, seed, config, window_size, y_train.shape[1]
+        prototype, seed, config, X_train.columns, stride_past
     )
 
+    """
     # Normalization
     (
         X_train,
         y_train,
-        y_train_scaler,
         X_val,
-        y_val_scaler,
         X_test,
-        y_test_scaler,
-    ) = normalize_data(X_train, y_train, X_val, y_val, X_test, y_test, window_size)
+        y_scaler,
+    ) = normalize_data(X_train, y_train, X_val, y_val, X_test, y_test)
+    """
 
     # Fit and prediction
-    estimator = pipeline.fit(X_train, y_train)
-    y_train_pred = estimator.predict(X_train)
-    y_val_pred = estimator.predict(X_val)
-    y_test_pred = estimator.predict(X_test)
+    estimator = pipeline.fit(X_train.to_numpy(), y_train.to_numpy())
+    y_train_pred = estimator.predict(X_train.to_numpy())
+    y_val_pred = estimator.predict(X_val.to_numpy())
+    y_test_pred = estimator.predict(X_test.to_numpy())
 
+    """
     # Inverse normalization
     y_train_pred, y_val_pred, y_test_pred = denormalize_data(
         y_train_pred,
-        y_train_scaler,
         y_val_pred,
-        y_val_scaler,
         y_test_pred,
-        y_test_scaler,
+        y_scaler,
     )
+    """
 
     return y_train_pred, y_val_pred, y_test_pred
 
@@ -195,7 +202,8 @@ def build_dnn(
     activation,
     last_activation,
     dropout,
-    statistics,
+    X_scaler,
+    y_scaler,
 ):
     """Create the neural network architecture.
 
@@ -206,7 +214,8 @@ def build_dnn(
         activation (_type_): activation function for the hidden layers
         last_activation (_type_): activation funcion for the output layer
         dropout (_type_): dropout rate
-        statistics (_type_): dictionary containing dataset statistics
+        X_scaler (_type_): the scaler used to normalize training samples
+        y_scaler (_type_): the scaler used to normalize training labels
 
     Returns:
         _type_: neural network model
@@ -215,8 +224,11 @@ def build_dnn(
     model.add(keras.layers.Input(shape=(input_count)))
 
     # Normalization
+    # model.add(keras.layers.Lambda(normalization, arguments={"X_scaler": X_scaler}))
     model.add(
-        keras.layers.Lambda(normalization, arguments={"norm_parameters": statistics})
+        tf.keras.layers.Normalization(
+            axis=1, mean=X_scaler.mean_, variance=X_scaler.var_, invert=False
+        )
     )
 
     for n in neuron_count_per_hidden_layer:
@@ -227,16 +239,17 @@ def build_dnn(
     model.add(keras.layers.Dense(output_count, activation=last_activation))
 
     # Inverse normalization
+    # model.add(keras.layers.Lambda(inverse_normalization, arguments={"X_scaler": y_scaler}))
     model.add(
-        keras.layers.Lambda(
-            inverse_normalization, arguments={"norm_parameters": statistics}
+        tf.keras.layers.Normalization(
+            axis=1, mean=y_scaler.mean_, variance=y_scaler.var_, invert=True
         )
     )
 
     return model
 
 
-def keras_objective(X_train, y_train, X_val, y_val, X_test, statistics, seed, config):
+def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     """Objective function to optimize when Keras NNs are used.
 
     Args:
@@ -245,7 +258,6 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, statistics, seed, co
         X_val (_type_): the validation set
         y_val (_type_): the validation label set
         X_test (_type_): the test set
-        statistics (_type_): the dictionary containing dataset statistics
         seed (_type_): the seed for reproducibility
         config (_type_): the configuration to explore
 
@@ -253,6 +265,10 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, statistics, seed, co
         _type_: the predicted y_train, y_val and y_test
     """
     tf.random.set_seed(seed)
+
+    # Fit X and y scalers
+    X_scaler = globals()[config["normalization"]["type"]]().fit(X_train)
+    y_scaler = globals()[config["normalization"]["type"]]().fit(y_train)
 
     # Create the model
     dnn = build_dnn(
@@ -262,7 +278,8 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, statistics, seed, co
         config["regression"]["activation_function"],
         config["regression"]["last_activation_function"],
         config["regression"]["dropout"],
-        statistics,
+        X_scaler,
+        y_scaler,
     )
 
     # Compile the model
@@ -302,10 +319,10 @@ def objective(
     y_val,
     X_test,
     y_test,
-    window_size,
-    output_horizon,
-    statistics,
+    stride_past,
     seed,
+    run_path,
+    sensors_name_list,
     config,
 ):
     """Function to optimize (i.e., the order of the pre-processing transformations + the ML algorithm)
@@ -317,10 +334,10 @@ def objective(
         y_val (_type_): validation data labels (ground truth)
         X_test (_type_): test data
         y_test (_type_): test data labels (ground truth)
-        window_size (_type_): the specified window size
-        output_horizon (_type_): the specified output horizon in hours
-        statistics (_type_): the dictionary containing dataset statistics
+        stride_past (_type_): the specified stride for past observations
         seed (_type_): seed for reproducibility
+        run_path (_type_): the current run path
+        sensors_name_list (_type_): the list of original sensor names
         config (_type_): the current config to visit
 
     Raises:
@@ -334,16 +351,13 @@ def objective(
     # Set the result if the config failed to be evaluated
     result = {
         "train_raw_scores": {
-            f"train_raw_score_{sensor}": float("-inf")
-            for sensor in np.arange(0, output_horizon * 12)
+            f"train_raw_score_{name}": float("-inf") for name in sensors_name_list
         },
         "val_raw_scores": {
-            f"val_raw_score_{sensor}": float("-inf")
-            for sensor in np.arange(0, output_horizon * 12)
+            f"val_raw_score_{name}": float("-inf") for name in sensors_name_list
         },
         "test_raw_scores": {
-            f"test_raw_score_{sensor}": float("-inf")
-            for sensor in np.arange(0, output_horizon * 12)
+            f"test_raw_score_{name}": float("-inf") for name in sensors_name_list
         },
         "train_score": float("-inf"),
         "val_score": float("-inf"),
@@ -352,42 +366,50 @@ def objective(
     }
 
     try:
-        if config["regression"]["type"] == "keras":
+        if config["regression"]["type"] == "FeedForward":
             y_train_pred, y_val_pred, y_test_pred = keras_objective(
                 X_train.to_numpy(),
                 y_train.to_numpy(),
                 X_val.to_numpy(),
                 y_val.to_numpy(),
                 X_test.to_numpy(),
-                statistics,
                 seed,
                 config,
             )
         else:
             y_train_pred, y_val_pred, y_test_pred = scikitlearn_objective(
-                X_train.to_numpy(),
-                y_train.to_numpy(),
-                X_val.to_numpy(),
-                y_val.to_numpy(),
-                X_test.to_numpy(),
-                y_test.to_numpy(),
-                window_size,
+                X_train,
+                y_train,
+                X_val,
+                y_val,
+                X_test,
+                y_test,
+                stride_past,
                 seed,
                 config,
             )
 
-        # Export predictions to csv files
-        pd.DataFrame(y_train_pred, columns=y_train.columns, index=y_train.index).to_csv(
-            "resources/predictions/conf_{}_train.csv".format(conf)
+        # Export predictions to CSV files
+        y_train_pred_df = pd.DataFrame(
+            y_train_pred, columns=y_train.columns, index=y_train.index
         )
-        pd.DataFrame(y_val_pred, columns=y_val.columns, index=y_val.index).to_csv(
-            "resources/predictions/conf_{}_val.csv".format(conf)
+        y_train_pred_df.to_csv(
+            os.path.join(run_path, "predictions", "conf_{}_train.csv".format(conf))
         )
-        pd.DataFrame(y_test_pred, columns=y_test.columns, index=y_test.index).to_csv(
-            "resources/predictions/conf_{}_test.csv".format(conf)
+        y_val_pred_df = pd.DataFrame(
+            y_val_pred, columns=y_val.columns, index=y_val.index
+        )
+        y_val_pred_df.to_csv(
+            os.path.join(run_path, "predictions", "conf_{}_val.csv".format(conf))
+        )
+        y_test_pred_df = pd.DataFrame(
+            y_test_pred, columns=y_test.columns, index=y_test.index
+        )
+        y_test_pred_df.to_csv(
+            os.path.join(run_path, "predictions", "conf_{}_test.csv".format(conf))
         )
 
-        # Compute raw RMSE (a value for each sensor)
+        # Compute raw RMSE (one value for each sensor)
         train_raw_rmse = mean_squared_error(
             y_train, y_train_pred, multioutput="raw_values", squared=False
         )

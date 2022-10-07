@@ -1,4 +1,4 @@
-timestamp,value
+unix_timestamp,value
 1630447200,2.16
 1630450800,3.24
 1630454400,4.5
