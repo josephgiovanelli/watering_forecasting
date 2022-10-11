@@ -4,6 +4,16 @@ import copy
 import shutil
 from collections import OrderedDict
 
+from utils.parameter_parsing import load_conf
+from utils.data_acquisition import (
+    load_agro_data_from_db,
+    create_rolling_window,
+    create_train_val_test_sets,
+    get_data_labels,
+)
+
+run_version = "v.1.0"
+
 algorithms = [
     "PersistentSystem",
     "LinearRegression",
@@ -54,6 +64,7 @@ case_studies = [
     },
 ]
 
+rolling_window_parameters_values = [6, 12, 24, 48, 96, 128]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -61,7 +72,7 @@ rolling_window_parameters = [
         "stride_ahead": value,
         "stride_past": value,
     }
-    for value in [6, 12, 24, 48, 96, 128]
+    for value in rolling_window_parameters_values
 ]
 
 dict_template = OrderedDict(
@@ -83,6 +94,7 @@ dict_template = OrderedDict(
             },
         ),
         ("arrangement", "Fondo PROGETTO"),
+        ("run_version", run_version),
         (
             "window_parameters",
             {
@@ -131,9 +143,10 @@ def __write_run(path, run):
         print(e)
 
 
-def generate_runs():
-    runs = []
+def generate_runs(db_credentials_file_path):
+    run_paths = []
     src_input_path = os.path.join("resources", "automl_inputs")
+    scenarios_dict = {}
 
     for algorithm in algorithms:
         print("# DATASET: {}".format(algorithm))
@@ -188,7 +201,7 @@ def generate_runs():
                 run["window_parameters"]["stride_past"] = parameter["stride_past"]
                 run["tuning_parameters"][
                     "algorithm_name"
-                ] = f"""{algorithm} v.1.0 HA {parameter["n_hours_ahead"]} HP {parameter["n_hours_past"]} SA {parameter["stride_ahead"]} SP {parameter["stride_past"]}"""
+                ] = f"""{algorithm} {run_version} HA {parameter["n_hours_ahead"]} HP {parameter["n_hours_past"]} SA {parameter["stride_ahead"]} SP {parameter["stride_past"]}"""
                 run["tuning_parameters"]["kind"] = algorithm
                 run["tuning_parameters"][
                     "description"
@@ -198,44 +211,88 @@ def generate_runs():
                     " |\.", "_", run["tuning_parameters"]["algorithm_name"]
                 )
                 case_name = re.sub(" |\.", "_", case)
-                outcomes_path = os.path.join("outcomes", f"run_{algo_name}_{case_name}")
-                create_directory(os.path.join(outcomes_path, "logs"))
-                create_directory(os.path.join(outcomes_path, "predictions"))
+                common_path = os.path.join(
+                    "outcomes",
+                    re.sub(" |\.", "_", run_version),
+                    f"""HA_{run["window_parameters"]["n_hours_ahead"]}_HP_{run["window_parameters"]["n_hours_past"]}_SA_{run["window_parameters"]["stride_ahead"]}_SP_{run["window_parameters"]["stride_past"]}""",
+                )
+                run_path = os.path.join(
+                    common_path,
+                    "runs",
+                    f"run_{algo_name}_{case_name}",
+                )
+                create_directory(os.path.join(run_path, "logs"))
+                create_directory(os.path.join(run_path, "predictions"))
                 __write_run(
                     os.path.join(
-                        outcomes_path,
+                        run_path,
                         "config_{}_{}.yaml".format(algo_name, case_name),
                     ),
                     run,
                 )
+                data_path = os.path.join(common_path, "data")
+                create_directory(data_path)
+                if not scenarios_dict:
+                    scenarios_dict = load_agro_data_from_db(
+                        run, load_conf(db_credentials_file_path)
+                    )
+                if not os.listdir(data_path):
+                    rolled_df_dict = {}
+                    for scenario in scenarios_dict:
+                        for year_scenario in scenarios_dict[scenario]:
+                            # Create rolling windows
+                            rolled_df_dict[
+                                re.sub(" |\.", "_", year_scenario.lower())
+                                + "_df_rolled"
+                            ] = create_rolling_window(
+                                scenarios_dict[scenario][year_scenario], run
+                            )
+                    # Create train, validation and test sets
+                    train_data, val_data, test_data = create_train_val_test_sets(
+                        rolled_df_dict, scenarios_dict, run
+                    )
+                    # Get data labels
+                    X_train, y_train, X_val, y_val, X_test, y_test = get_data_labels(
+                        train_data,
+                        val_data,
+                        test_data,
+                        run["window_parameters"]["n_hours_ahead"],
+                    )
+                    # Generate samples and ground truth CSV files
+                    X_train.to_csv(os.path.join(data_path, "X_train.csv"))
+                    y_train.to_csv(os.path.join(data_path, "y_train.csv"))
+                    X_val.to_csv(os.path.join(data_path, "X_val.csv"))
+                    y_val.to_csv(os.path.join(data_path, "y_val.csv"))
+                    X_test.to_csv(os.path.join(data_path, "X_test.csv"))
+                    y_test.to_csv(os.path.join(data_path, "y_test.csv"))
 
-                runs.append(f"run_{algo_name}_{case_name}")
+                run_paths.append(run_path)
 
-        # AutoML input files
+        # Generate AutoML input files
         if algo_name == "PersistentSystem":
             shutil.copy2(
                 os.path.join(src_input_path, "persistent_system_input.json"),
-                os.path.join(outcomes_path, "automl_input.json"),
+                os.path.join(run_path, "automl_input.json"),
             )
         elif algo_name == "LinearRegression":
             shutil.copy2(
                 os.path.join(src_input_path, "linear_regressor_input.json"),
-                os.path.join(outcomes_path, "automl_input.json"),
+                os.path.join(run_path, "automl_input.json"),
             )
         elif algo_name == "RandomForest":
             shutil.copy2(
                 os.path.join(src_input_path, "random_forest_input.json"),
-                os.path.join(outcomes_path, "automl_input.json"),
+                os.path.join(run_path, "automl_input.json"),
             )
         elif algo_name == "SVR":
             shutil.copy2(
                 os.path.join(src_input_path, "svr_input.json"),
-                os.path.join(outcomes_path, "automl_input.json"),
+                os.path.join(run_path, "automl_input.json"),
             )
         else:
             shutil.copy2(
                 os.path.join(src_input_path, "feed_forward_input.json"),
-                os.path.join(outcomes_path, "automl_input.json"),
+                os.path.join(run_path, "automl_input.json"),
             )
 
-    return runs
+    return run_paths

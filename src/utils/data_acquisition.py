@@ -183,7 +183,9 @@ def load_agro_data_from_db(run_cfg, db_cfg):
     # Get the specific years scenarios for each scenario
     for scenario in scenarios_dict:
         years_scenario = pd.read_sql(years_scenarios_query.format(scenario), connection)
-        scenarios_dict[scenario] = years_scenario.values.flatten().tolist()
+        scenarios_dict[scenario] = {
+            y: None for y in years_scenario.values.flatten().tolist()
+        }  #
 
         # Get the scenarios data (weather data, watering data, ground potential data)
         for year_scenario in scenarios_dict[scenario]:
@@ -212,7 +214,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
     # Get DB data sensors
     frequent_sensors_df = pd.read_sql(
         frequent_sensors_query.format(
-            scenario=next(iter(scenarios_dict.items()))[1][0]
+            scenario=next(iter(next(iter(scenarios_dict.items()))[1]))
         ),
         connection,
     )  # take the first batch of the training scenario samples
@@ -237,6 +239,9 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                 min_distance = euclidean_distance
                 best_approx_sensor = sensor
         filtered_sensors.append(tuple(best_approx_sensor))
+
+    print("FILTERED SENSORS:")
+    print(filtered_sensors)
 
     Parameters().set_params(
         original_sensors, filtered_sensors
@@ -297,8 +302,8 @@ def load_agro_data_from_db(run_cfg, db_cfg):
             # Imputation
             globals()[year_scenario_name + "_df"] = (
                 globals()[year_scenario_name + "_df"]
-                .fillna(method="bfill")
                 .fillna(method="ffill")
+                .fillna(method="bfill")
             )
             # Rename columns
             globals()[year_scenario_name + "_df"].index.names = ["unix_timestamp"]
@@ -342,8 +347,8 @@ def load_agro_data_from_db(run_cfg, db_cfg):
             globals()[year_scenario_name + "_df"].sort_index(inplace=True)
             globals()[year_scenario_name + "_df"] = (
                 globals()[year_scenario_name + "_df"]
-                .fillna(method="bfill")
                 .fillna(method="ffill")
+                .fillna(method="bfill")
             )
 
             # Rename sensors columns to 'original' values
@@ -358,41 +363,11 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                 inplace=True,
             )
 
-            # Create rolling windows
-            globals()[year_scenario_name + "_df_rolled"] = create_rolling_window(
-                globals()[year_scenario_name + "_df"], run_cfg
-            )
+            scenarios_dict[scenario][year_scenario] = globals()[
+                year_scenario_name + "_df"
+            ]
 
-    # Create train, validation and test sets
-    train = pd.concat(
-        [
-            globals()[re.sub(" |\.", "_", train_scenario.lower()) + "_df_rolled"]
-            for train_scenario in scenarios_dict[
-                run_cfg["scenario_names"]["train_scenario_name"]
-            ]
-        ],
-        axis=0,
-    )
-    val = pd.concat(
-        [
-            globals()[re.sub(" |\.", "_", val_scenario.lower()) + "_df_rolled"]
-            for val_scenario in scenarios_dict[
-                run_cfg["scenario_names"]["val_scenario_name"]
-            ]
-        ],
-        axis=0,
-    )
-    test = pd.concat(
-        [
-            globals()[re.sub(" |\.", "_", test_scenario.lower()) + "_df_rolled"]
-            for test_scenario in scenarios_dict[
-                run_cfg["scenario_names"]["test_scenario_name"]
-            ]
-        ],
-        axis=0,
-    )
-
-    return train, val, test
+    return scenarios_dict
 
 
 def create_rolling_window(df, run_cfg):
@@ -450,9 +425,42 @@ def create_rolling_window(df, run_cfg):
     return rolling_window_df
 
 
+def create_train_val_test_sets(rolled_df_dict, scenarios_dict, run_cfg):
+    # Create train, validation and test sets
+    train = pd.concat(
+        [
+            rolled_df_dict[re.sub(" |\.", "_", train_scenario.lower()) + "_df_rolled"]
+            for train_scenario in scenarios_dict[
+                run_cfg["scenario_names"]["train_scenario_name"]
+            ]
+        ],
+        axis=0,
+    )
+    val = pd.concat(
+        [
+            rolled_df_dict[re.sub(" |\.", "_", val_scenario.lower()) + "_df_rolled"]
+            for val_scenario in scenarios_dict[
+                run_cfg["scenario_names"]["val_scenario_name"]
+            ]
+        ],
+        axis=0,
+    )
+    test = pd.concat(
+        [
+            rolled_df_dict[re.sub(" |\.", "_", test_scenario.lower()) + "_df_rolled"]
+            for test_scenario in scenarios_dict[
+                run_cfg["scenario_names"]["test_scenario_name"]
+            ]
+        ],
+        axis=0,
+    )
+
+    return train, val, test
+
+
 # To be used with "local" data
 def train_val_test_split(
-    data, output_horizon, test_ratio, val_ratio=None, shuffle=False
+    data, n_hours_ahead, test_ratio, val_ratio=None, shuffle=False
 ):
     """Split input dataframe in train, validation and test set.
 
@@ -468,8 +476,11 @@ def train_val_test_split(
                 X_val is the (optional) validation set, y_val is the (optional) validation label set,
                 X_test is the test set, y_test is the test label set
     """
-    X = data.iloc[:, : -output_horizon * 12]
-    y = data.iloc[:, -output_horizon * 12 :]
+    sensors_columns = [
+        col + f"_a{n_hours_ahead}" for col in Parameters().get_original_sensor_columns()
+    ]
+    X = data.loc[:, data.columns[~data.columns.isin(sensors_columns)]]
+    y = data.loc[:, sensors_columns]
 
     X_val = []
     y_val = []
@@ -514,27 +525,36 @@ def train_val_test_split(
     return X_train, y_train, X_val, y_val, X_test, y_test
 
 
-def get_data_labels(train_data, val_data, test_data):
+def get_data_labels(train_data, val_data, test_data, n_hours_ahead):
     """Split the given datasets to obtain the samples and the corresponding labels.
 
     Args:
         train_data (_type_): the training data
         val_data (_type_): the validation data
         test_data (_type_): the test data
+        n_hours_ahead (_type_): the number of hours ahead considered in the prediction
 
     Returns:
         _type_: X_train is the training set, y_train is the training label set,
                 X_val is the validation set, y_val is the validation label set,
                 X_test is the test set, y_test is the test label set
     """
-    X_train = train_data.iloc[:, :-12]
-    y_train = train_data.iloc[:, -12:]
+    sensors_columns = [
+        col + f"_a{n_hours_ahead}" for col in Parameters().get_original_sensor_columns()
+    ]
 
-    X_val = val_data.iloc[:, :-12]
-    y_val = val_data.iloc[:, -12:]
+    X_train = train_data.loc[
+        :, train_data.columns[~train_data.columns.isin(sensors_columns)]
+    ]
+    y_train = train_data.loc[:, sensors_columns]
 
-    X_test = test_data.iloc[:, :-12]
-    y_test = test_data.iloc[:, -12:]
+    X_val = val_data.loc[:, val_data.columns[~val_data.columns.isin(sensors_columns)]]
+    y_val = val_data.loc[:, sensors_columns]
+
+    X_test = test_data.loc[
+        :, test_data.columns[~test_data.columns.isin(sensors_columns)]
+    ]
+    y_test = test_data.loc[:, sensors_columns]
 
     return X_train, y_train, X_val, y_val, X_test, y_test
 
@@ -629,7 +649,15 @@ def replace_with_zeros(normalized_tensor):
     )
 
 
-def plot_results(best_predictions, ground_truth, set_name, hours_ahead, output_path):
+def plot_results(
+    best_predictions,
+    ground_truth,
+    set_name,
+    hours_ahead,
+    output_path,
+    min_gp_value,
+    max_gp_value,
+):
     """Plot the best configuration result for each sensor.
 
     Args:
@@ -641,10 +669,11 @@ def plot_results(best_predictions, ground_truth, set_name, hours_ahead, output_p
     """
     best_predictions = best_predictions.add_suffix("_pred")
     result = pd.concat([best_predictions, ground_truth], axis=1, join="inner")
+    result.index = pd.to_datetime(result.index, unit="s")
 
     # Create plot
     fig, axes = plt.subplots(nrows=3, ncols=4)
-    fig.set_size_inches(24, 18, forward=True)
+    fig.set_size_inches(24, 24, forward=True)
     for idz, z in enumerate(Parameters().get_original_z_coords()):
         for _, y in enumerate(Parameters().get_original_y_coords()):
             for idx, x in enumerate(Parameters().get_original_x_coords()):
@@ -655,6 +684,6 @@ def plot_results(best_predictions, ground_truth, set_name, hours_ahead, output_p
                     ]
                 ].plot(ax=axes[idz, idx])
                 axes[idz, idx].set_title(f"z{z}_y{y}_x{x} - {hours_ahead} h ahead")
-                axes[idz, idx].set_ylim([-1500.0, 0.0])
+                axes[idz, idx].set_ylim([min_gp_value, max_gp_value])
 
     plt.savefig(os.path.join(output_path, f"{set_name}_best_results.png"))

@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import warnings
@@ -20,13 +21,14 @@ from flaml import tune
 from utils.parameter_parsing import parse_args, load_conf
 from utils.data_acquisition import (
     load_agro_data_from_csv,
+    train_val_test_split,
     open_db_connection,
     close_db_connection,
     load_agro_data_from_db,
-    get_data_labels,
-    train_val_test_split,
-    plot_results,
     create_rolling_window,
+    create_train_val_test_sets,
+    get_data_labels,
+    plot_results,
 )
 from automl.optimization import objective
 from automl.space_loading import get_space
@@ -40,18 +42,48 @@ def main(args, run_cfg, db_cfg):
     df = load_agro_data_from_csv()
     df = create_rolling_window(df, run_cfg)
     X_train, y_train, X_val, y_val, X_test, y_test = train_val_test_split(
-        df, 1, test_ratio=0.33, val_ratio=0.5, shuffle=False
+        df, run_cfg["window_parameters"]["n_hours_ahead"], test_ratio=0.33, val_ratio=0.5, shuffle=False
+    )
+    """
+
+    """
+    ### DB MODE - DEBUG
+    # Load the datasets from DB
+    scenarios_dict = load_agro_data_from_db(run_cfg, db_cfg)
+    # Create the rolling windows
+    rolled_df_dict = {}
+    for scenario in scenarios_dict:
+        for year_scenario in scenarios_dict[scenario]:
+            rolled_df_dict[
+                re.sub(" |\.", "_", year_scenario.lower()) + "_df_rolled"
+            ] = create_rolling_window(scenarios_dict[scenario][year_scenario], run_cfg)
+    # Create train, validation and test sets
+    train_data, val_data, test_data = create_train_val_test_sets(
+        rolled_df_dict, scenarios_dict, run_cfg
+    )
+    # Get data labels
+    X_train, y_train, X_val, y_val, X_test, y_test = get_data_labels(
+        train_data,
+        val_data,
+        test_data,
+        run_cfg["window_parameters"]["n_hours_ahead"],
     )
     """
 
     ### DB MODE
-    # Load the datasets from DB and create the rolling windows
-    train_data, val_data, test_data = load_agro_data_from_db(run_cfg, db_cfg)
-
-    # Get data labels
-    X_train, y_train, X_val, y_val, X_test, y_test = get_data_labels(
-        train_data, val_data, test_data
+    # Load the datasets from CSV files
+    data_path = os.path.join(
+        "outcomes",
+        run_cfg["run_version"],
+        f"""HA_{run_cfg["window_parameters"]["n_hours_ahead"]}_HP_{run_cfg["window_parameters"]["n_hours_past"]}_SA_{run_cfg["window_parameters"]["stride_ahead"]}_SP_{run_cfg["window_parameters"]["stride_past"]}""",
+        "data",
     )
+    X_train = pd.read_csv(os.path.join(data_path, "X_train.csv"))
+    y_train = pd.read_csv(os.path.join(data_path, "y_train.csv"))
+    X_val = pd.read_csv(os.path.join(data_path, "X_val.csv"))
+    y_val = pd.read_csv(os.path.join(data_path, "y_val.csv"))
+    X_test = pd.read_csv(os.path.join(data_path, "X_test.csv"))
+    y_test = pd.read_csv(os.path.join(data_path, "y_test.csv"))
 
     # Load the space
     space = get_space(os.path.join(args.run_directory_path, "automl_input.json"))
@@ -128,6 +160,8 @@ def main(args, run_cfg, db_cfg):
             for values in analysis.results.values()
         ],
     }
+
+    print("Optimization process with FLAML finished")
 
     # Export the result
     with open(
@@ -223,8 +257,10 @@ def main(args, run_cfg, db_cfg):
         if_exists="append",
     )
 
+    # Compute min and max values for ground potential data
+    sets_dict = {}
     for set in ["train", "val", "test"]:
-        best_pred_df = pd.read_csv(
+        sets_dict[set] = pd.read_csv(
             os.path.join(
                 args.run_directory_path,
                 "predictions",
@@ -232,6 +268,15 @@ def main(args, run_cfg, db_cfg):
             ),
             index_col="unix_timestamp",
         )
+    concat_df = pd.concat(
+        list(sets_dict.values()) + [y_train, y_val, y_test],
+        axis=0,
+    )
+    min_gp_value = concat_df.min().min()
+    max_gp_value = concat_df.max().max()
+
+    for set in ["train", "val", "test"]:
+        best_pred_df = sets_dict[set].copy()
 
         common_col_dict["field_name"] = run_cfg["field_names"][f"{set}_field_name"]
         common_col_dict["scenario_name"] = run_cfg["scenario_names"][
@@ -379,7 +424,11 @@ def main(args, run_cfg, db_cfg):
             set,
             run_cfg["window_parameters"]["n_hours_ahead"],
             args.run_directory_path,
+            min_gp_value,
+            max_gp_value,
         )
+
+    print("Results stored in the DB")
 
     ### DB MODE
     close_db_connection(connection)

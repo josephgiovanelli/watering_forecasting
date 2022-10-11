@@ -6,8 +6,10 @@ from tqdm import tqdm
 
 from run_generator import generate_runs
 
+db_credentials_file_path = os.path.join("resources", "db_credentials.yaml")
 
-def create_commands(runs):
+
+def create_commands(run_paths):
     """Generate: the commands to run, the path where to save the std out, the path where to save the std err.
 
     Args:
@@ -18,11 +20,11 @@ def create_commands(runs):
     """
     return [
         (
-            f"""python src/main.py --run_directory_path {os.path.join("outcomes", run)} --config_file_path {os.path.join("outcomes", run, f"config_{run.split('_', 1)[1]}.yaml")} --db_credentials_file_path {os.path.join("resources", "db_credentials.yaml")}""",
-            os.path.join("outcomes", run, "logs", f"std_out.txt"),
-            os.path.join("outcomes", run, "logs", f"std_err.txt"),
+            f"""python src/main.py --run_directory_path {run_path} --config_file_path {os.path.join(run_path, f"config_{run_path.split('/')[-1].split('_', 1)[-1]}.yaml")} --db_credentials_file_path {db_credentials_file_path}""",
+            os.path.join(run_path, "logs", f"std_out.txt"),
+            os.path.join(run_path, "logs", f"std_err.txt"),
         )
-        for run in runs
+        for run_path in run_paths
     ]
 
 
@@ -42,14 +44,14 @@ def run_cmd(cmd, stdout_path, stderr_path):
 
 
 # Generate the runs to consider
-runs = generate_runs()
+run_paths = generate_runs(db_credentials_file_path)
 
 # Variables for the example at hand
-num_tasks = len(runs)
+num_tasks = len(run_paths)
 pool_size = 8
 
 # Generate the command to run
-commands = create_commands(runs)
+commands = create_commands(run_paths)
 
 # Create the progress bar (num_tasks to execute)
 with tqdm(total=num_tasks) as pbar:

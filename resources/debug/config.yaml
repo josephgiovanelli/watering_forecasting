@@ -7,6 +7,7 @@ scenario_names:
   val_scenario_name: Synthetic Bologna v.1.0
   test_scenario_name: Real Fondo PROGETTO_1 2020
 arrangement: Fondo PROGETTO
+run_version: v.1.0
 window_parameters:
   n_hours_ahead: 6
   n_hours_past: 6
