@@ -48,7 +48,7 @@ run_paths = generate_runs(db_credentials_file_path)
 
 # Variables for the example at hand
 num_tasks = len(run_paths)
-pool_size = 8
+pool_size = 12
 
 # Generate the command to run
 commands = create_commands(run_paths)
