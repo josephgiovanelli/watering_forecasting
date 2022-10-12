@@ -78,12 +78,24 @@ def main(args, run_cfg, db_cfg):
         f"""HA_{run_cfg["window_parameters"]["n_hours_ahead"]}_HP_{run_cfg["window_parameters"]["n_hours_past"]}_SA_{run_cfg["window_parameters"]["stride_ahead"]}_SP_{run_cfg["window_parameters"]["stride_past"]}""",
         "data",
     )
-    X_train = pd.read_csv(os.path.join(data_path, "X_train.csv"))
-    y_train = pd.read_csv(os.path.join(data_path, "y_train.csv"))
-    X_val = pd.read_csv(os.path.join(data_path, "X_val.csv"))
-    y_val = pd.read_csv(os.path.join(data_path, "y_val.csv"))
-    X_test = pd.read_csv(os.path.join(data_path, "X_test.csv"))
-    y_test = pd.read_csv(os.path.join(data_path, "y_test.csv"))
+    X_train = pd.read_csv(
+        os.path.join(data_path, "X_train.csv"), index_col="unix_timestamp"
+    )
+    y_train = pd.read_csv(
+        os.path.join(data_path, "y_train.csv"), index_col="unix_timestamp"
+    )
+    X_val = pd.read_csv(
+        os.path.join(data_path, "X_val.csv"), index_col="unix_timestamp"
+    )
+    y_val = pd.read_csv(
+        os.path.join(data_path, "y_val.csv"), index_col="unix_timestamp"
+    )
+    X_test = pd.read_csv(
+        os.path.join(data_path, "X_test.csv"), index_col="unix_timestamp"
+    )
+    y_test = pd.read_csv(
+        os.path.join(data_path, "y_test.csv"), index_col="unix_timestamp"
+    )
 
     # Load the space
     space = get_space(os.path.join(args.run_directory_path, "automl_input.json"))
@@ -124,7 +136,7 @@ def main(args, run_cfg, db_cfg):
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
         time_budget_s=1800,
         verbose=0,
-        max_failure=run_cfg["tuning_parameters"]["batch_size"],  #
+        # max_failure=run_cfg["tuning_parameters"]["batch_size"],
     )
     end_time = time.time()
 
