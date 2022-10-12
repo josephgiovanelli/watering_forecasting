@@ -64,7 +64,7 @@ case_studies = [
     },
 ]
 
-rolling_window_parameters_values = [6, 12, 24, 48, 96, 128]
+rolling_window_parameters_values = [6, 12, 24, 48, 96, 168]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -294,5 +294,8 @@ def generate_runs(db_credentials_file_path):
                     )
 
                 run_paths.append(run_path)
+                break  #
+            break  #
+        break  #
 
     return run_paths
