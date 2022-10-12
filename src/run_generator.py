@@ -294,8 +294,5 @@ def generate_runs(db_credentials_file_path):
                     )
 
                 run_paths.append(run_path)
-                break  #
-            break  #
-        break  #
 
     return run_paths
