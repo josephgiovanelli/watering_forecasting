@@ -19,7 +19,7 @@ algorithms = [
     "LinearRegression",
     "RandomForest",
     "SVR",
-    "FeedForward",
+    # "FeedForward",
 ]
 
 case_studies = [
