@@ -74,7 +74,7 @@ def main(args, run_cfg, db_cfg):
     # Load the datasets from CSV files
     data_path = os.path.join(
         "outcomes",
-        run_cfg["run_version"],
+        re.sub(" |\.", "_", run_cfg["run_version"]),
         f"""HA_{run_cfg["window_parameters"]["n_hours_ahead"]}_HP_{run_cfg["window_parameters"]["n_hours_past"]}_SA_{run_cfg["window_parameters"]["stride_ahead"]}_SP_{run_cfg["window_parameters"]["stride_past"]}""",
         "data",
     )
