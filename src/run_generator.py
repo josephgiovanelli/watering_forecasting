@@ -266,33 +266,33 @@ def generate_runs(db_credentials_file_path):
                     X_test.to_csv(os.path.join(data_path, "X_test.csv"))
                     y_test.to_csv(os.path.join(data_path, "y_test.csv"))
 
-                run_paths.append(run_path)
+                # Generate AutoML input files
+                if algo_name == "PersistentSystem":
+                    shutil.copy2(
+                        os.path.join(src_input_path, "persistent_system_input.json"),
+                        os.path.join(run_path, "automl_input.json"),
+                    )
+                elif algo_name == "LinearRegression":
+                    shutil.copy2(
+                        os.path.join(src_input_path, "linear_regressor_input.json"),
+                        os.path.join(run_path, "automl_input.json"),
+                    )
+                elif algo_name == "RandomForest":
+                    shutil.copy2(
+                        os.path.join(src_input_path, "random_forest_input.json"),
+                        os.path.join(run_path, "automl_input.json"),
+                    )
+                elif algo_name == "SVR":
+                    shutil.copy2(
+                        os.path.join(src_input_path, "svr_input.json"),
+                        os.path.join(run_path, "automl_input.json"),
+                    )
+                else:
+                    shutil.copy2(
+                        os.path.join(src_input_path, "feed_forward_input.json"),
+                        os.path.join(run_path, "automl_input.json"),
+                    )
 
-        # Generate AutoML input files
-        if algo_name == "PersistentSystem":
-            shutil.copy2(
-                os.path.join(src_input_path, "persistent_system_input.json"),
-                os.path.join(run_path, "automl_input.json"),
-            )
-        elif algo_name == "LinearRegression":
-            shutil.copy2(
-                os.path.join(src_input_path, "linear_regressor_input.json"),
-                os.path.join(run_path, "automl_input.json"),
-            )
-        elif algo_name == "RandomForest":
-            shutil.copy2(
-                os.path.join(src_input_path, "random_forest_input.json"),
-                os.path.join(run_path, "automl_input.json"),
-            )
-        elif algo_name == "SVR":
-            shutil.copy2(
-                os.path.join(src_input_path, "svr_input.json"),
-                os.path.join(run_path, "automl_input.json"),
-            )
-        else:
-            shutil.copy2(
-                os.path.join(src_input_path, "feed_forward_input.json"),
-                os.path.join(run_path, "automl_input.json"),
-            )
+                run_paths.append(run_path)
 
     return run_paths
