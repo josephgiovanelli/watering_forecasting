@@ -16,10 +16,10 @@ run_version = "v.1.0"
 
 algorithms = [
     "PersistentSystem",
-    # "LinearRegression",
-    # "RandomForest",
+    "LinearRegression",
+    "RandomForest",
     "SVR",
-    # "FeedForward",
+    "FeedForward",
 ]
 
 case_studies = [
@@ -64,7 +64,7 @@ case_studies = [
     },
 ]
 
-rolling_window_parameters_values = [6, 12, 24]  # , 48, 96, 168]
+rolling_window_parameters_values = [6, 12, 24, 48, 96, 168]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -111,7 +111,7 @@ dict_template = OrderedDict(
                 "kind": "",
                 "case_study": "",
                 "description": "",
-                "batch_size": 1,
+                "batch_size": -1,
                 "seed": 42,
             },
         ),
@@ -216,7 +216,7 @@ def generate_runs(db_credentials_file_path):
                 )
                 case_name = re.sub(" |\.", "_", case)
                 common_path = os.path.join(
-                    "outcomes3",
+                    "outcomes_full",
                     re.sub(" |\.", "_", run_version),
                     f"""HA_{run["window_parameters"]["n_hours_ahead"]}_HP_{run["window_parameters"]["n_hours_past"]}_SA_{run["window_parameters"]["stride_ahead"]}_SP_{run["window_parameters"]["stride_past"]}_{case_name}""",
                 )
