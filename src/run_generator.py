@@ -15,9 +15,9 @@ from utils.data_acquisition import (
 run_version = "v.1.0"
 
 algorithms = [
-    "PersistentSystem",
+    # "PersistentSystem",
     # "LinearRegression",
-    # "RandomForest",
+    "RandomForest",
     # "SVR",
     # "FeedForward",
 ]
@@ -149,7 +149,7 @@ def generate_runs(db_credentials_file_path):
     src_input_path = os.path.join("resources", "automl_inputs")
 
     for case_study in case_studies:
-        print("## CASE STUDY: {}".format(case_study))
+        print("# CASE STUDY: {}".format(case_study))
         fields_scenarios_dict = {}
         if case_study["field_names"][
             [*case_study["field_names"].keys()][-1]
@@ -162,7 +162,7 @@ def generate_runs(db_credentials_file_path):
         else:
             case = "Real vs Real"
         for algorithm in algorithms:
-            print("# DATASET: {}".format(algorithm))
+            print("## ALGORITHM: {}".format(algorithm))
             for parameter in rolling_window_parameters:
                 run = copy.deepcopy(dict_template)
                 run["field_names"][
@@ -216,7 +216,7 @@ def generate_runs(db_credentials_file_path):
                 )
                 case_name = re.sub(" |\.", "_", case)
                 common_path = os.path.join(
-                    "outcomes",
+                    "outcomes1",
                     re.sub(" |\.", "_", run_version),
                     f"""HA_{run["window_parameters"]["n_hours_ahead"]}_HP_{run["window_parameters"]["n_hours_past"]}_SA_{run["window_parameters"]["stride_ahead"]}_SP_{run["window_parameters"]["stride_past"]}_{case_name}""",
                 )

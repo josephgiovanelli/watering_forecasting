@@ -3,6 +3,7 @@ import subprocess
 import utils.istarmap  # import to apply patch
 from multiprocessing import Pool
 from tqdm import tqdm
+import sys
 
 from run_generator import generate_runs
 
@@ -37,7 +38,6 @@ def run_cmd(run_path, cmd, stdout_path, stderr_path):
         stdout_path (str, bytes or os.PathLike object): where to save the std out.
         stderr_path (str, bytes or os.PathLike object): where to save the std err.
     """
-    print("CURRENT RUN: ", run_path)  #
     open(stdout_path, "w")
     open(stderr_path, "w")
     with open(stdout_path, "a") as log_out:
@@ -50,15 +50,18 @@ run_paths = generate_runs(db_credentials_file_path)
 
 # Variables for the example at hand
 num_tasks = len(run_paths)
-pool_size = 1
+pool_size = 12
 
-# Generate the command to run
+# Generate the commands to run
 commands = create_commands(run_paths)
 
 # Create the progress bar (num_tasks to execute)
-with tqdm(total=num_tasks) as pbar:
+with tqdm(run_paths, file=sys.stdout) as pbar:
     # Create a pool of pool_size workers
     with Pool(pool_size) as pool:
         # Assign the commands (tasks) to the pool, and run it
         for _ in pool.istarmap(run_cmd, commands):
-            pbar.update()
+            # pbar.update()
+            for path in pbar:
+                print("CURRENT RUN: ", path)
+                # pbar.set_description("CURRENT RUN: ", path)
