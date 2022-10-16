@@ -61,7 +61,6 @@ with tqdm(run_paths, file=sys.stdout) as pbar:
     with Pool(pool_size) as pool:
         # Assign the commands (tasks) to the pool, and run it
         for _ in pool.istarmap(run_cmd, commands):
-            # pbar.update()
-            for path in pbar:
-                print("CURRENT RUN: ", path)
-                # pbar.set_description("CURRENT RUN: ", path)
+            pbar.update()
+    for path in pbar:
+        print("CURRENT RUN: ", path)
