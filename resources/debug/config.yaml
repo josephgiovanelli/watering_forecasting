@@ -14,9 +14,10 @@ window_parameters:
   stride_ahead: 6
   stride_past: 6
 tuning_parameters:
-  algorithm_name: LinearRegression v.1.0 HA 6 HP 6 SA 6 SP 6
+  algorithm_name: LinearRegression v.1.0 HA 6 HP 6 SA 6 SP 6 Synthetic vs Synthetic
   kind: LinearRegression
-  description: "First attempt of LinearRegression with all sensors - Train field: Synthetic field v.1.0, Val field: Synthetic field v.1.0, Test field: Synthetic field v.1.0 - Train scenario: Synthetic Martorano v.1.0, Val scenario: Synthetic Bologna v.1.0, Test scenario: Real Fondo PROGETTO_1 2020 - Imputation: bfill+ffill - Normalization: standard"
+  case_study: Synthetic vs Synthetic
+  description: "First attempt of LinearRegression with all sensors - Train field: Synthetic field v.1.0, Val field: Synthetic field v.1.0, Test field: Synthetic field v.1.0 - Train scenario: Synthetic Martorano v.1.0, Val scenario: Synthetic Bologna v.1.0, Test scenario: Real Fondo PROGETTO_1 2020 - Imputation: bfill+ffill"
   batch_size: 1
   seed: 42
 

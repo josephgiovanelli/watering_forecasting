@@ -30,12 +30,17 @@ from utils.data_acquisition import (
     get_data_labels,
     plot_results,
 )
+from utils.json_to_csv import json_to_csv
 from automl.optimization import objective
 from automl.space_loading import get_space
 
 
 def main(args, run_cfg, db_cfg):
     np.random.seed(run_cfg["tuning_parameters"]["seed"])
+
+    # Set meaningful information previously obtained
+    real_sensors = pd.read_csv(os.path.join("resources", "real_sensors.csv")).values
+    Parameters().set_real_sensors_coords(real_sensors)
 
     """
     ### LOCAL MODE
@@ -46,36 +51,13 @@ def main(args, run_cfg, db_cfg):
     )
     """
 
-    """
-    ### DB MODE - DEBUG
-    # Load the datasets from DB
-    scenarios_dict = load_agro_data_from_db(run_cfg, db_cfg)
-    # Create the rolling windows
-    rolled_df_dict = {}
-    for scenario in scenarios_dict:
-        for year_scenario in scenarios_dict[scenario]:
-            rolled_df_dict[
-                re.sub(" |\.", "_", year_scenario.lower()) + "_df_rolled"
-            ] = create_rolling_window(scenarios_dict[scenario][year_scenario], run_cfg)
-    # Create train, validation and test sets
-    train_data, val_data, test_data = create_train_val_test_sets(
-        rolled_df_dict, scenarios_dict, run_cfg
-    )
-    # Get data labels
-    X_train, y_train, X_val, y_val, X_test, y_test = get_data_labels(
-        train_data,
-        val_data,
-        test_data,
-        run_cfg["window_parameters"]["n_hours_ahead"],
-    )
-    """
-
     ### DB MODE
     # Load the datasets from CSV files
+    case_study = re.sub(" |\.", "_", run_cfg["tuning_parameters"]["case_study"])
     data_path = os.path.join(
         "outcomes",
         re.sub(" |\.", "_", run_cfg["run_version"]),
-        f"""HA_{run_cfg["window_parameters"]["n_hours_ahead"]}_HP_{run_cfg["window_parameters"]["n_hours_past"]}_SA_{run_cfg["window_parameters"]["stride_ahead"]}_SP_{run_cfg["window_parameters"]["stride_past"]}""",
+        f"""HA_{run_cfg["window_parameters"]["n_hours_ahead"]}_HP_{run_cfg["window_parameters"]["n_hours_past"]}_SA_{run_cfg["window_parameters"]["stride_ahead"]}_SP_{run_cfg["window_parameters"]["stride_past"]}_{case_study}""",
         "data",
     )
     X_train = pd.read_csv(
@@ -103,7 +85,7 @@ def main(args, run_cfg, db_cfg):
     ### DB MODE
     connection = open_db_connection(db_cfg)
 
-    # Get the name of the original sensors
+    # Get the name (ID) of the real sensors
     sensors_name_query = "SELECT sensor_name \
         FROM synthetic_sensor_arrangement \
         WHERE arrangement_name = '{}' \
@@ -174,6 +156,9 @@ def main(args, run_cfg, db_cfg):
     }
 
     print("Optimization process with FLAML finished")
+
+    # Convert the result in CSV
+    json_to_csv(automl_output=automl_output.copy(), args=args)
 
     # Export the result
     with open(
@@ -306,9 +291,9 @@ def main(args, run_cfg, db_cfg):
         syn_pred_hum_bins_rows_list = []
         syn_sensor_rows_list = []
 
-        for x_coord in Parameters().get_original_x_coords():
-            for y_coord in Parameters().get_original_y_coords():
-                for z_coord in Parameters().get_original_z_coords():
+        for x_coord in Parameters().get_real_x_coords():
+            for y_coord in Parameters().get_real_y_coords():
+                for z_coord in Parameters().get_real_z_coords():
                     for idx, _ in best_pred_df.iterrows():
                         # Populate 'synthetic_prediction' table
                         new_syn_pred_col_dict = dict(syn_pred_col_dict)
@@ -362,7 +347,7 @@ def main(args, run_cfg, db_cfg):
             syn_pred_hum_bins_col_dict = dict(common_col_dict)
             syn_pred_hum_bins_col_dict["unix_timestamp"] = idx
             # Compute bins count
-            for coord in Parameters().get_original_sensor_columns():
+            for coord in Parameters().get_real_sensor_columns():
                 for index, col in humidity_bins_df.iterrows():
                     if (
                         best_pred_df.loc[

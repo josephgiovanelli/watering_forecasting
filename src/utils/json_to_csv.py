@@ -1,3 +1,4 @@
+import os
 import csv
 
 
@@ -21,7 +22,9 @@ def json_to_csv(automl_output, args):
     columns = list(set(columns))
     columns.sort(reverse=True)
 
-    with open(args.output_path.replace("json", "csv"), "w") as out_file:
+    with open(
+        os.path.join(args.run_directory_path, "automl_output.json"), "w"
+    ) as out_file:
         csv_w = csv.writer(out_file)
         csv_w.writerow(columns)
 

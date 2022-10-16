@@ -20,6 +20,7 @@ def create_commands(run_paths):
     """
     return [
         (
+            run_path,
             f"""python src/main.py --run_directory_path {run_path} --config_file_path {os.path.join(run_path, f"config_{run_path.split('/')[-1].split('_', 1)[-1]}.yaml")} --db_credentials_file_path {db_credentials_file_path}""",
             os.path.join(run_path, "logs", f"std_out.txt"),
             os.path.join(run_path, "logs", f"std_err.txt"),
@@ -28,7 +29,7 @@ def create_commands(run_paths):
     ]
 
 
-def run_cmd(cmd, stdout_path, stderr_path):
+def run_cmd(run_path, cmd, stdout_path, stderr_path):
     """Run a command in the shell, and save std out and std err.
 
     Args:
@@ -36,6 +37,7 @@ def run_cmd(cmd, stdout_path, stderr_path):
         stdout_path (str, bytes or os.PathLike object): where to save the std out.
         stderr_path (str, bytes or os.PathLike object): where to save the std err.
     """
+    print("CURRENT RUN: ", run_path)  #
     open(stdout_path, "w")
     open(stderr_path, "w")
     with open(stdout_path, "a") as log_out:
@@ -48,7 +50,7 @@ run_paths = generate_runs(db_credentials_file_path)
 
 # Variables for the example at hand
 num_tasks = len(run_paths)
-pool_size = 12
+pool_size = 1
 
 # Generate the command to run
 commands = create_commands(run_paths)

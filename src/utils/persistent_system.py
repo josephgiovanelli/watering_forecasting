@@ -16,10 +16,11 @@ class PersistentSystem:
 
     def predict(self, dataset):
         df = pd.DataFrame(data=dataset, columns=self.columns)
+
         predictions = df[
             [
                 sensor + f"_p{self.stride_past}"
-                for sensor in Parameters().get_original_sensor_columns()
+                for sensor in Parameters().get_real_sensor_columns()
             ]
         ]
 

@@ -337,7 +337,7 @@ def objective(
         stride_past (_type_): the specified stride for past observations
         seed (_type_): seed for reproducibility
         run_path (_type_): the current run path
-        sensors_name_list (_type_): the list of original sensor names
+        sensors_name_list (_type_): the list of real sensor names
         config (_type_): the current config to visit
 
     Raises:
@@ -452,8 +452,8 @@ def objective(
 
     except Exception as e:
         print(
-            f"""MyException: {e}"""
-            #   {traceback.print_exc()}"""
+            f"""MyException: {e}
+            {traceback.print_exc()}"""
         )
 
     return result
