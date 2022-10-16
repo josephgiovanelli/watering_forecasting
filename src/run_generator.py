@@ -18,7 +18,7 @@ algorithms = [
     "PersistentSystem",
     # "LinearRegression",
     # "RandomForest",
-    # "SVR",
+    "SVR",
     # "FeedForward",
 ]
 
@@ -64,7 +64,7 @@ case_studies = [
     },
 ]
 
-rolling_window_parameters_values = [6]  # , 12, 24, 48, 96, 168]
+rolling_window_parameters_values = [6, 12, 24]  # , 48, 96, 168]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -216,7 +216,7 @@ def generate_runs(db_credentials_file_path):
                 )
                 case_name = re.sub(" |\.", "_", case)
                 common_path = os.path.join(
-                    "outcomes2",
+                    "outcomes3",
                     re.sub(" |\.", "_", run_version),
                     f"""HA_{run["window_parameters"]["n_hours_ahead"]}_HP_{run["window_parameters"]["n_hours_past"]}_SA_{run["window_parameters"]["stride_ahead"]}_SP_{run["window_parameters"]["stride_past"]}_{case_name}""",
                 )
