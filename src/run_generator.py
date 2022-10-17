@@ -18,8 +18,8 @@ algorithms = [
     # "PersistentSystem",
     # "LinearRegression",
     # "RandomForest",
-    "SVR",
-    # "FeedForward",
+    # "SVR",
+    "FeedForward",
 ]
 
 case_studies = [

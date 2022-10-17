@@ -116,7 +116,7 @@ def main(args, run_cfg, db_cfg):
         metric="val_score",
         mode="min",
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
-        time_budget_s=1800,
+        time_budget_s=3600,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
     )
