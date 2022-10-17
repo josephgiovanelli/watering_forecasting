@@ -93,7 +93,7 @@ dict_template = OrderedDict(
                 "test_scenario_name": "",
             },
         ),
-        ("arrangement", "Fondo Progetto"),
+        ("arrangement", "Fondo PROGETTO"),
         ("run_version", run_version),
         (
             "window_parameters",

@@ -723,9 +723,20 @@ def normalization(tensor, X_scaler):
     Returns:
         _type_: the normalized tensor
     """
+
+    """
     normalized_tensor = tf.convert_to_tensor(
         X_scaler.transform(tensor.numpy()),
         dtype=tf.float32,
+    )
+    """
+
+    normalized_tensor = tf.divide(
+        tf.subtract(
+            tensor,
+            tf.convert_to_tensor(X_scaler.mean_, dtype=tf.float32),
+        ),
+        tf.math.sqrt(tf.convert_to_tensor(X_scaler.var_, dtype=tf.float32)),
     )
     return replace_with_zeros(normalized_tensor)
 
@@ -740,8 +751,19 @@ def inverse_normalization(tensor, y_scaler):
     Returns:
         _type_: the de-normalized tensor
     """
+
+    """
     denormalized_tensor = tf.convert_to_tensor(
         y_scaler.inverse_transform(tensor.numpy()), dtype=tf.float32
+    )
+    """
+
+    denormalized_tensor = tf.add(
+        tf.multiply(
+            tf.math.sqrt(tf.convert_to_tensor(y_scaler.var_, dtype=tf.float32)),
+            tensor,
+        ),
+        tf.convert_to_tensor(y_scaler.mean_, dtype=tf.float32),
     )
 
     return replace_with_zeros(denormalized_tensor)

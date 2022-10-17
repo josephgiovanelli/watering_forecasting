@@ -224,12 +224,14 @@ def build_dnn(
     model.add(keras.layers.Input(shape=(input_count)))
 
     # Normalization
-    # model.add(keras.layers.Lambda(normalization, arguments={"X_scaler": X_scaler}))
+    model.add(keras.layers.Lambda(normalization, arguments={"X_scaler": X_scaler}))
+    """
     model.add(
         tf.keras.layers.Normalization(
             axis=1, mean=X_scaler.mean_, variance=X_scaler.var_, invert=False
         )
     )
+    """
 
     for n in neuron_count_per_hidden_layer:
         model.add(keras.layers.Dense(n, activation=activation))
@@ -239,12 +241,16 @@ def build_dnn(
     model.add(keras.layers.Dense(output_count, activation=last_activation))
 
     # Inverse normalization
-    # model.add(keras.layers.Lambda(inverse_normalization, arguments={"X_scaler": y_scaler}))
+    model.add(
+        keras.layers.Lambda(inverse_normalization, arguments={"y_scaler": y_scaler})
+    )
+    """
     model.add(
         tf.keras.layers.Normalization(
             axis=1, mean=y_scaler.mean_, variance=y_scaler.var_, invert=True
         )
     )
+    """
 
     return model
 
