@@ -55,7 +55,7 @@ def main(args, run_cfg, db_cfg):
     # Load the datasets from CSV files
     case_study = re.sub(" |\.", "_", run_cfg["tuning_parameters"]["case_study"])
     data_path = os.path.join(
-        "outcomes_full",
+        "outcomes",
         re.sub(" |\.", "_", run_cfg["run_version"]),
         f"""HA_{run_cfg["window_parameters"]["n_hours_ahead"]}_HP_{run_cfg["window_parameters"]["n_hours_past"]}_SA_{run_cfg["window_parameters"]["stride_ahead"]}_SP_{run_cfg["window_parameters"]["stride_past"]}_{case_study}""",
         "data",
@@ -200,7 +200,7 @@ def main(args, run_cfg, db_cfg):
     algo_col_dict = dict(basic_col_dict)
     algo_col_dict.update(
         {
-            hp: automl_output["best_config"]["config"]["regression"][hp]
+            hp.lower(): automl_output["best_config"]["config"]["regression"][hp]
             for hp in automl_output["best_config"]["config"]["regression"]
             if hp != "meta_estimator"
             and hp != "super_type"

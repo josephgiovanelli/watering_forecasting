@@ -15,11 +15,11 @@ from utils.data_acquisition import (
 run_version = "v.1.0"
 
 algorithms = [
-    "PersistentSystem",
-    "LinearRegression",
-    "RandomForest",
+    # "PersistentSystem",
+    # "LinearRegression",
+    # "RandomForest",
     "SVR",
-    "FeedForward",
+    # "FeedForward",
 ]
 
 case_studies = [
@@ -216,7 +216,7 @@ def generate_runs(db_credentials_file_path):
                 )
                 case_name = re.sub(" |\.", "_", case)
                 common_path = os.path.join(
-                    "outcomes_full",
+                    "outcomes",
                     re.sub(" |\.", "_", run_version),
                     f"""HA_{run["window_parameters"]["n_hours_ahead"]}_HP_{run["window_parameters"]["n_hours_past"]}_SA_{run["window_parameters"]["stride_ahead"]}_SP_{run["window_parameters"]["stride_past"]}_{case_name}""",
                 )
