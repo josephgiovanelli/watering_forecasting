@@ -200,7 +200,7 @@ def main(args, run_cfg, db_cfg):
     algo_col_dict = dict(basic_col_dict)
     algo_col_dict.update(
         {
-            hp: automl_output["best_config"]["config"]["regression"][hp]
+            hp.lower(): automl_output["best_config"]["config"]["regression"][hp]
             for hp in automl_output["best_config"]["config"]["regression"]
             if hp != "meta_estimator"
             and hp != "super_type"

@@ -15,11 +15,11 @@ from utils.data_acquisition import (
 run_version = "v.1.0"
 
 algorithms = [
-    "PersistentSystem",
-    "LinearRegression",
-    "RandomForest",
+    # "PersistentSystem",
+    # "LinearRegression",
+    # "RandomForest",
     "SVR",
-    "FeedForward",
+    # "FeedForward",
 ]
 
 case_studies = [
@@ -93,7 +93,7 @@ dict_template = OrderedDict(
                 "test_scenario_name": "",
             },
         ),
-        ("arrangement", "Fondo PROGETTO"),
+        ("arrangement", "Fondo Progetto"),
         ("run_version", run_version),
         (
             "window_parameters",

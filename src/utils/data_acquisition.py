@@ -1,4 +1,5 @@
 import os
+import traceback
 
 import pandas as pd
 import numpy as np
@@ -129,59 +130,6 @@ def close_db_connection(connection):
 
 
 def load_agro_data_from_db(run_cfg, db_cfg):
-    # Open DB connection
-    connection = open_db_connection(db_cfg)
-
-    # Queries
-    years_scenarios_query = "SELECT scenario_name \
-        FROM synthetic_scenario_composed_scenario \
-		WHERE composed_scenario_name = '{}'"
-
-    arpae_query = "SELECT unix_timestamp, value_type_name, \
-        CASE \
-            WHEN value_type_name = 'RADIATIONS' AND value < 0 THEN 0 \
-            ELSE value \
-        END AS value \
-        FROM synthetic_scenario_arpae_data \
-        WHERE scenario_arpae_name IN (SELECT scenario_arpae_name \
-            FROM synthetic_scenario \
-			WHERE name = '{}') \
-        ORDER BY unix_timestamp ASC, value_type_name ASC"
-
-    water_query = "SELECT unix_timestamp, value_type_name, value \
-        FROM synthetic_scenario_water_data \
-        WHERE scenario_water_name IN (SELECT scenario_water_name \
-		    FROM synthetic_scenario \
-		    WHERE name = '{}') \
-        ORDER BY unix_timestamp ASC, value_type_name ASC"
-
-    gp_query = "SELECT unix_timestamp, ROUND(x::numeric, 3) AS x, ROUND(y::numeric, 3) AS y, z, value \
-        FROM synthetic_data \
-        WHERE field_name = '{}' \
-        AND scenario_name = '{}' \
-        AND value_type_name = 'GROUND_WATER_POTENTIAL' \
-        ORDER BY unix_timestamp ASC, x ASC, y ASC, z DESC"
-
-    sensors_query = "SELECT x, y, z \
-        FROM synthetic_sensor_arrangement ssa \
-        INNER JOIN synthetic_sensor ss \
-        ON ssa.sensor_name = ss.name \
-        WHERE arrangement_name = '{}' \
-        ORDER BY x ASC, y ASC, z DESC"
-
-    frequent_sensors_query = "SELECT x, y, z, COUNT(*) AS freq \
-        FROM synthetic_data \
-        WHERE field_name = '{field}' \
-        AND scenario_name = '{scenario}' \
-        AND value_type_name = 'GROUND_WATER_POTENTIAL' \
-        GROUP BY x, y, z \
-        HAVING COUNT(*) > ( \
-            SELECT COUNT(DISTINCT unix_timestamp) / 4 \
-            FROM synthetic_data \
-            WHERE field_name = '{field}' \
-            AND scenario_name = '{scenario}' \
-            AND value_type_name = 'GROUND_WATER_POTENTIAL')"
-
     # Fields and scenarios to consider for train, validation and test
     fields_scenarios_dict = {
         "train_field": {
@@ -200,236 +148,325 @@ def load_agro_data_from_db(run_cfg, db_cfg):
             }
         },
     }
-    # Get the specific years scenarios for each scenario
-    for field in fields_scenarios_dict:
-        for field_name in fields_scenarios_dict[field]:
-            for scenario in fields_scenarios_dict[field][field_name]:
-                years_scenario = pd.read_sql(
-                    years_scenarios_query.format(scenario), connection
+
+    try:
+        # Open DB connection
+        connection = open_db_connection(db_cfg)
+
+        # Queries
+        check_field_arrangement_consistency_query = "SELECT * FROM public.synthetic_field_arrangement \
+            WHERE field_name = '{}' \
+            AND arrangement_name = '{}'"
+
+        years_scenarios_query = "SELECT scenario_name \
+            FROM synthetic_scenario_composed_scenario \
+            WHERE composed_scenario_name = '{}'"
+
+        arpae_query = "SELECT unix_timestamp, value_type_name, \
+            CASE \
+                WHEN value_type_name = 'RADIATIONS' AND value < 0 THEN 0 \
+                ELSE value \
+            END AS value \
+            FROM synthetic_scenario_arpae_data \
+            WHERE scenario_arpae_name IN (SELECT scenario_arpae_name \
+                FROM synthetic_scenario \
+                WHERE name = '{}') \
+            ORDER BY unix_timestamp ASC, value_type_name ASC"
+
+        water_query = "SELECT unix_timestamp, value_type_name, value \
+            FROM synthetic_scenario_water_data \
+            WHERE scenario_water_name IN (SELECT scenario_water_name \
+                FROM synthetic_scenario \
+                WHERE name = '{}') \
+            ORDER BY unix_timestamp ASC, value_type_name ASC"
+
+        gp_query = "SELECT unix_timestamp, ROUND(x::numeric, 3) AS x, ROUND(y::numeric, 3) AS y, z, value \
+            FROM synthetic_data \
+            WHERE field_name = '{}' \
+            AND scenario_name = '{}' \
+            AND value_type_name = 'GROUND_WATER_POTENTIAL' \
+            ORDER BY unix_timestamp ASC, x ASC, y ASC, z DESC"
+
+        sensors_query = "SELECT x, y, z \
+            FROM synthetic_sensor_arrangement ssa \
+            INNER JOIN synthetic_sensor ss \
+            ON ssa.sensor_name = ss.name \
+            WHERE arrangement_name = '{}' \
+            ORDER BY x ASC, y ASC, z DESC"
+
+        frequent_sensors_query = "SELECT x, y, z, COUNT(*) AS freq \
+            FROM synthetic_data \
+            WHERE field_name = '{field}' \
+            AND scenario_name = '{scenario}' \
+            AND value_type_name = 'GROUND_WATER_POTENTIAL' \
+            GROUP BY x, y, z \
+            HAVING COUNT(*) > ( \
+                SELECT COUNT(DISTINCT unix_timestamp) / 4 \
+                FROM synthetic_data \
+                WHERE field_name = '{field}' \
+                AND scenario_name = '{scenario}' \
+                AND value_type_name = 'GROUND_WATER_POTENTIAL')"
+
+        # Get the specific years scenarios for each scenario
+        for field in fields_scenarios_dict:
+            for field_name in fields_scenarios_dict[field]:
+                field_arrangement_consistency = pd.read_sql(
+                    check_field_arrangement_consistency_query.format(
+                        field_name, run_cfg["arrangement"]
+                    ),
+                    connection,
                 )
-                fields_scenarios_dict[field][field_name][scenario] = {
-                    y: None for y in years_scenario.values.flatten().tolist()
-                }
-                # Get the scenarios data (weather data, watering data, ground potential data)
-                for year_scenario in fields_scenarios_dict[field][field_name][scenario]:
-                    year_scenario_name = re.sub(
-                        " |\.",
-                        "_",
-                        (field.split("_", 1)[0] + "_" + year_scenario).lower(),
-                    )  # add suffix to avoid duplicate name variables
-                    globals()[year_scenario_name + "_arpae_df"] = pd.read_sql(
-                        arpae_query.format(year_scenario), connection
+                if field_arrangement_consistency.empty:
+                    raise Exception(
+                        f"""The specified sensors arrangement [{run_cfg["arrangement"]}] is not compatible with the given field [{field_name}]"""
                     )
-                    globals()[year_scenario_name + "_water_df"] = pd.read_sql(
-                        water_query.format(year_scenario), connection
+                for scenario in fields_scenarios_dict[field][field_name]:
+                    years_scenario = pd.read_sql(
+                        years_scenarios_query.format(scenario), connection
                     )
-                    globals()[year_scenario_name + "_gp_df"] = pd.read_sql(
-                        gp_query.format(field_name, year_scenario), connection
-                    )
-
-                    print(year_scenario)
-
-    # Get the coordinates of the real sensors
-    sensors_coordinates_df = pd.read_sql(
-        sensors_query.format(run_cfg["arrangement"]), connection
-    )
-    sensors_coordinates_df.sort_values(
-        ["x", "y", "z"], ascending=[True, True, False], inplace=True
-    )  # sort sensors in ascending order by x and y values and in descending order by z value
-    real_sensors = np.around(sensors_coordinates_df.to_numpy(), 2)
-
-    print("REAL SENSORS:")
-    print(real_sensors)
-
-    # Pivot and filter data
-    for field in fields_scenarios_dict:
-        for field_name in fields_scenarios_dict[field]:
-            for scenario in fields_scenarios_dict[field][field_name]:
-                for year_scenario in fields_scenarios_dict[field][field_name][scenario]:
-                    # Get the coordinates of the most frequent synthetic sensors
-                    frequent_sensors_df = pd.read_sql(
-                        frequent_sensors_query.format(
-                            field=field_name,
-                            scenario=year_scenario,
-                        ),
-                        connection,
-                    )  # take the first batch of the training scenario samples
-                    frequent_sensors_df = frequent_sensors_df.loc[:, "x":"z"]
-                    frequent_sensors_df.sort_values(
-                        ["x", "y", "z"], ascending=[True, True, False], inplace=True
-                    )  # sort sensors in ascending order by x and y values and in descending order by z value
-                    synthetic_sensors = np.around(frequent_sensors_df.to_numpy(), 2)
-
-                    # Filter synthetic sensors
-                    filtered_synthetic_sensors = []
-                    for real_sensor in real_sensors:
-                        min_distance = math.inf
-                        for sensor in synthetic_sensors:
-                            euclidean_distance = distance.euclidean(real_sensor, sensor)
-                            if euclidean_distance <= min_distance or np.isclose(
-                                euclidean_distance, min_distance
-                            ):
-                                min_distance = euclidean_distance
-                                best_approx_sensor = sensor
-                        filtered_synthetic_sensors.append(tuple(best_approx_sensor))
-
-                    print("FILTERED SYNTHETIC SENSORS - {}:".format(year_scenario))
-                    print(filtered_synthetic_sensors)
-
-                    # Save sensors coordinates for later usage
-                    Parameters().set_real_sensors_coords(real_sensors)
-                    pd.DataFrame(real_sensors).to_csv(
-                        os.path.join("resources", "real_sensors.csv"), index=False
-                    )
-                    Parameters().set_synthetic_sensors_coords(
-                        filtered_synthetic_sensors
-                    )
-
-                    # Pivot weather and irrigation data
-                    year_scenario_name = re.sub(
-                        " |\.",
-                        "_",
-                        (field.split("_", 1)[0] + "_" + year_scenario).lower(),
-                    )
-                    globals()[year_scenario_name + "_arpae_df"] = globals()[
-                        year_scenario_name + "_arpae_df"
-                    ].pivot(
-                        index="unix_timestamp",
-                        columns="value_type_name",
-                        values="value",
-                    )
-                    globals()[year_scenario_name + "_water_df"] = globals()[
-                        year_scenario_name + "_water_df"
-                    ].pivot(
-                        index="unix_timestamp",
-                        columns="value_type_name",
-                        values="value",
-                    )
-
-                    # Filter ground potential data
-                    globals()[year_scenario_name + "_gp_df"] = globals()[
-                        year_scenario_name + "_gp_df"
-                    ][
-                        [
-                            i in filtered_synthetic_sensors
-                            for i in zip(
-                                globals()[year_scenario_name + "_gp_df"].x,
-                                globals()[year_scenario_name + "_gp_df"].y,
-                                globals()[year_scenario_name + "_gp_df"].z,
-                            )
-                        ]
-                    ]
-                    # Pivot ground potential data
-                    globals()[year_scenario_name + "_gp_df"] = globals()[
-                        year_scenario_name + "_gp_df"
-                    ].pivot(
-                        index="unix_timestamp", columns=["z", "y", "x"], values="value"
-                    )
-                    globals()[year_scenario_name + "_gp_df"].columns = [
-                        f"z{column[0]}_y{column[1]}_x{column[2]}"
-                        for column in globals()[
-                            year_scenario_name + "_gp_df"
-                        ].columns.values
-                    ]
-                    globals()[year_scenario_name + "_gp_df"] = globals()[
-                        year_scenario_name + "_gp_df"
-                    ].reindex(
-                        sorted(
-                            globals()[year_scenario_name + "_gp_df"].columns,
-                            reverse=True,
-                        ),
-                        axis=1,
-                    )
-
-                    # Concatenate weather, watering and ground potential data
-                    globals()[year_scenario_name + "_df"] = pd.concat(
-                        [
-                            globals()[year_scenario_name + "_arpae_df"],
-                            globals()[year_scenario_name + "_water_df"],
-                            globals()[year_scenario_name + "_gp_df"],
-                        ],
-                        axis=1,
-                    )
-
-                    print(year_scenario, " - Pivoted")
-
-                    # Imputation
-                    globals()[year_scenario_name + "_df"] = (
-                        globals()[year_scenario_name + "_df"]
-                        .fillna(method="ffill")
-                        .fillna(method="bfill")
-                    )
-                    # Rename columns
-                    globals()[year_scenario_name + "_df"].index.names = [
-                        "unix_timestamp"
-                    ]
-                    globals()[year_scenario_name + "_df"].rename(
-                        columns={
-                            "AIR_HUMIDITY": "air_humidity",
-                            "AIR_TEMPERATURE": "air_temperature",
-                            "RADIATIONS": "solar_radiation",
-                            "WIND_SPEED": "wind_speed",
-                            "IRRIGATIONS": "irrigation",
-                            "PRECIPITATIONS": "precipitation",
-                        },
-                        inplace=True,
-                    )
-                    # Reorder columns
-                    cols = [
-                        "air_temperature",
-                        "air_humidity",
-                        "wind_speed",
-                        "solar_radiation",
-                        "precipitation",
-                        "irrigation",
-                    ] + list(globals()[year_scenario_name + "_df"].columns[6:].values)
-                    globals()[year_scenario_name + "_df"] = globals()[
-                        year_scenario_name + "_df"
-                    ][cols]
-
-                    # Add and impute missing timestamps
-                    min_timestamp = globals()[year_scenario_name + "_df"].index.min()
-                    max_timestamp = globals()[year_scenario_name + "_df"].index.max()
-                    timestamps_range = list(
-                        range(min_timestamp, max_timestamp + 1, 3600)
-                    )
-                    missing_timestamps = [
-                        timestamp
-                        for timestamp in globals()[year_scenario_name + "_df"].index
-                        if timestamp not in timestamps_range
-                    ]
-                    for timestamp in missing_timestamps:
-                        globals()[year_scenario_name + "_df"].loc[
-                            timestamp
-                        ] = pd.Series(
-                            data=np.nan,
-                            index=globals()[year_scenario_name + "_df"].columns,
+                    fields_scenarios_dict[field][field_name][scenario] = {
+                        y: None for y in years_scenario.values.flatten().tolist()
+                    }
+                    # Get the scenarios data (weather data, watering data, ground potential data)
+                    for year_scenario in fields_scenarios_dict[field][field_name][
+                        scenario
+                    ]:
+                        year_scenario_name = re.sub(
+                            " |\.",
+                            "_",
+                            (field.split("_", 1)[0] + "_" + year_scenario).lower(),
+                        )  # add suffix to avoid duplicate name variables
+                        globals()[year_scenario_name + "_arpae_df"] = pd.read_sql(
+                            arpae_query.format(year_scenario), connection
                         )
-                    globals()[year_scenario_name + "_df"].sort_index(inplace=True)
-                    globals()[year_scenario_name + "_df"] = (
-                        globals()[year_scenario_name + "_df"]
-                        .fillna(method="ffill")
-                        .fillna(method="bfill")
-                    )
+                        globals()[year_scenario_name + "_water_df"] = pd.read_sql(
+                            water_query.format(year_scenario), connection
+                        )
+                        globals()[year_scenario_name + "_gp_df"] = pd.read_sql(
+                            gp_query.format(field_name, year_scenario), connection
+                        )
 
-                    # Rename sensors columns to real values
-                    globals()[year_scenario_name + "_df"].rename(
-                        columns={
-                            col: new_col
-                            for col, new_col in zip(
-                                Parameters().get_synthetic_sensor_columns(),
-                                Parameters().get_real_sensor_columns(),
+                        print(year_scenario)
+
+        # Get the coordinates of the real sensors
+        sensors_coordinates_df = pd.read_sql(
+            sensors_query.format(run_cfg["arrangement"]), connection
+        )
+        sensors_coordinates_df.sort_values(
+            ["x", "y", "z"], ascending=[True, True, False], inplace=True
+        )  # sort sensors in ascending order by x and y values and in descending order by z value
+        real_sensors = np.around(sensors_coordinates_df.to_numpy(), 2)
+
+        print("REAL SENSORS:")
+        print(real_sensors)
+
+        # Pivot and filter data
+        for field in fields_scenarios_dict:
+            for field_name in fields_scenarios_dict[field]:
+                for scenario in fields_scenarios_dict[field][field_name]:
+                    for year_scenario in fields_scenarios_dict[field][field_name][
+                        scenario
+                    ]:
+                        # Get the coordinates of the most frequent synthetic sensors
+                        frequent_sensors_df = pd.read_sql(
+                            frequent_sensors_query.format(
+                                field=field_name,
+                                scenario=year_scenario,
+                            ),
+                            connection,
+                        )  # take the first batch of the training scenario samples
+                        frequent_sensors_df = frequent_sensors_df.loc[:, "x":"z"]
+                        frequent_sensors_df.sort_values(
+                            ["x", "y", "z"], ascending=[True, True, False], inplace=True
+                        )  # sort sensors in ascending order by x and y values and in descending order by z value
+                        synthetic_sensors = np.around(frequent_sensors_df.to_numpy(), 2)
+
+                        # Filter synthetic sensors
+                        filtered_synthetic_sensors = []
+                        for real_sensor in real_sensors:
+                            min_distance = math.inf
+                            for sensor in synthetic_sensors:
+                                euclidean_distance = distance.euclidean(
+                                    real_sensor, sensor
+                                )
+                                if euclidean_distance <= min_distance or np.isclose(
+                                    euclidean_distance, min_distance
+                                ):
+                                    min_distance = euclidean_distance
+                                    best_approx_sensor = sensor
+                            filtered_synthetic_sensors.append(tuple(best_approx_sensor))
+
+                        print("FILTERED SYNTHETIC SENSORS - {}:".format(year_scenario))
+                        print(filtered_synthetic_sensors)
+
+                        # Save sensors coordinates for later usage
+                        Parameters().set_real_sensors_coords(real_sensors)
+                        pd.DataFrame(real_sensors).to_csv(
+                            os.path.join("resources", "real_sensors.csv"), index=False
+                        )
+                        Parameters().set_synthetic_sensors_coords(
+                            filtered_synthetic_sensors
+                        )
+
+                        # Pivot weather and irrigation data
+                        year_scenario_name = re.sub(
+                            " |\.",
+                            "_",
+                            (field.split("_", 1)[0] + "_" + year_scenario).lower(),
+                        )
+                        globals()[year_scenario_name + "_arpae_df"] = globals()[
+                            year_scenario_name + "_arpae_df"
+                        ].pivot(
+                            index="unix_timestamp",
+                            columns="value_type_name",
+                            values="value",
+                        )
+                        globals()[year_scenario_name + "_water_df"] = globals()[
+                            year_scenario_name + "_water_df"
+                        ].pivot(
+                            index="unix_timestamp",
+                            columns="value_type_name",
+                            values="value",
+                        )
+
+                        # Filter ground potential data
+                        globals()[year_scenario_name + "_gp_df"] = globals()[
+                            year_scenario_name + "_gp_df"
+                        ][
+                            [
+                                i in filtered_synthetic_sensors
+                                for i in zip(
+                                    globals()[year_scenario_name + "_gp_df"].x,
+                                    globals()[year_scenario_name + "_gp_df"].y,
+                                    globals()[year_scenario_name + "_gp_df"].z,
+                                )
+                            ]
+                        ]
+                        # Pivot ground potential data
+                        globals()[year_scenario_name + "_gp_df"] = globals()[
+                            year_scenario_name + "_gp_df"
+                        ].pivot(
+                            index="unix_timestamp",
+                            columns=["z", "y", "x"],
+                            values="value",
+                        )
+                        globals()[year_scenario_name + "_gp_df"].columns = [
+                            f"z{column[0]}_y{column[1]}_x{column[2]}"
+                            for column in globals()[
+                                year_scenario_name + "_gp_df"
+                            ].columns.values
+                        ]
+                        globals()[year_scenario_name + "_gp_df"] = globals()[
+                            year_scenario_name + "_gp_df"
+                        ].reindex(
+                            sorted(
+                                globals()[year_scenario_name + "_gp_df"].columns,
+                                reverse=True,
+                            ),
+                            axis=1,
+                        )
+
+                        # Concatenate weather, watering and ground potential data
+                        globals()[year_scenario_name + "_df"] = pd.concat(
+                            [
+                                globals()[year_scenario_name + "_arpae_df"],
+                                globals()[year_scenario_name + "_water_df"],
+                                globals()[year_scenario_name + "_gp_df"],
+                            ],
+                            axis=1,
+                        )
+
+                        print(year_scenario, " - Pivoted")
+
+                        # Imputation
+                        globals()[year_scenario_name + "_df"] = (
+                            globals()[year_scenario_name + "_df"]
+                            .fillna(method="ffill")
+                            .fillna(method="bfill")
+                        )
+                        # Rename columns
+                        globals()[year_scenario_name + "_df"].index.names = [
+                            "unix_timestamp"
+                        ]
+                        globals()[year_scenario_name + "_df"].rename(
+                            columns={
+                                "AIR_HUMIDITY": "air_humidity",
+                                "AIR_TEMPERATURE": "air_temperature",
+                                "RADIATIONS": "solar_radiation",
+                                "WIND_SPEED": "wind_speed",
+                                "IRRIGATIONS": "irrigation",
+                                "PRECIPITATIONS": "precipitation",
+                            },
+                            inplace=True,
+                        )
+                        # Reorder columns
+                        cols = [
+                            "air_temperature",
+                            "air_humidity",
+                            "wind_speed",
+                            "solar_radiation",
+                            "precipitation",
+                            "irrigation",
+                        ] + list(
+                            globals()[year_scenario_name + "_df"].columns[6:].values
+                        )
+                        globals()[year_scenario_name + "_df"] = globals()[
+                            year_scenario_name + "_df"
+                        ][cols]
+
+                        # Add and impute missing timestamps
+                        min_timestamp = globals()[
+                            year_scenario_name + "_df"
+                        ].index.min()
+                        max_timestamp = globals()[
+                            year_scenario_name + "_df"
+                        ].index.max()
+                        timestamps_range = list(
+                            range(min_timestamp, max_timestamp + 1, 3600)
+                        )
+                        missing_timestamps = [
+                            timestamp
+                            for timestamp in globals()[year_scenario_name + "_df"].index
+                            if timestamp not in timestamps_range
+                        ]
+                        for timestamp in missing_timestamps:
+                            globals()[year_scenario_name + "_df"].loc[
+                                timestamp
+                            ] = pd.Series(
+                                data=np.nan,
+                                index=globals()[year_scenario_name + "_df"].columns,
                             )
-                        },
-                        inplace=True,
-                    )
+                        globals()[year_scenario_name + "_df"].sort_index(inplace=True)
+                        globals()[year_scenario_name + "_df"] = (
+                            globals()[year_scenario_name + "_df"]
+                            .fillna(method="ffill")
+                            .fillna(method="bfill")
+                        )
 
-                    fields_scenarios_dict[field][field_name][scenario][
-                        year_scenario
-                    ] = globals()[year_scenario_name + "_df"]
+                        # Rename sensors columns to real values
+                        globals()[year_scenario_name + "_df"].rename(
+                            columns={
+                                col: new_col
+                                for col, new_col in zip(
+                                    Parameters().get_synthetic_sensor_columns(),
+                                    Parameters().get_real_sensor_columns(),
+                                )
+                            },
+                            inplace=True,
+                        )
 
-    # Close DB connection
-    close_db_connection(connection)
+                        fields_scenarios_dict[field][field_name][scenario][
+                            year_scenario
+                        ] = globals()[year_scenario_name + "_df"]
+
+        # Close DB connection
+        close_db_connection(connection)
+
+    except Exception as e:
+        print(
+            f"""MyException: {e}
+            {traceback.print_exc()}"""
+        )
 
     return fields_scenarios_dict
 
