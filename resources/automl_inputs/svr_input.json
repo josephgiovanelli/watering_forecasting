@@ -22,8 +22,7 @@
                         "linear",
                         "poly",
                         "rbf",
-                        "sigmoid",
-                        "precomputed"
+                        "sigmoid"
                     ]
                 },
                 "degree": {

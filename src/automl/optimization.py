@@ -255,6 +255,12 @@ def build_dnn(
     return model
 
 
+def root_mean_squared_error(y_true, y_pred):
+    return tf.keras.backend.sqrt(
+        tf.keras.backend.mean(tf.keras.backend.square(y_pred - y_true))
+    )
+
+
 def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     """Objective function to optimize when Keras NNs are used.
 
@@ -290,7 +296,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
 
     # Compile the model
     dnn.compile(
-        loss=tf.keras.metrics.RootMeanSquaredError(),  # "mse",
+        loss=root_mean_squared_error,  # tf.keras.metrics.RootMeanSquaredError(),  # "mse",
         optimizer=config["regression"]["optimizer"],
         metrics=[tf.keras.metrics.RootMeanSquaredError()],
     )

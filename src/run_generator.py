@@ -64,7 +64,7 @@ case_studies = [
     },
 ]
 
-rolling_window_parameters_values = [6]  # , 12, 24, 48, 96, 168]
+rolling_window_parameters_values = [6, 12, 24, 48, 96, 168]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -111,7 +111,7 @@ dict_template = OrderedDict(
                 "kind": "",
                 "case_study": "",
                 "description": "",
-                "batch_size": 1,
+                "batch_size": -1,
                 "seed": 42,
             },
         ),

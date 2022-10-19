@@ -695,7 +695,7 @@ def denormalize_data(y_train_pred, y_val_pred, y_test_pred, y_scaler):
 
 def normalization(tensor, X_scaler):
     """Normalization function used for Keras NNs.
-    MinMaxScaler is implemented.
+    StandardScaler is implemented.
 
     Args:
         tensor (_type_): the input tensor
