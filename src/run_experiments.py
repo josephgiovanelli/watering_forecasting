@@ -50,13 +50,20 @@ run_paths = generate_runs(db_credentials_file_path)
 
 # Variables for the example at hand
 num_tasks = len(run_paths)
-pool_size = 1
+pool_size = 5
 
 # Generate the commands to run
 commands = create_commands(run_paths)
 
 # Create the progress bar (num_tasks to execute)
 with tqdm(run_paths, file=sys.stdout) as pbar:
+    """
+    for idx, cmd in enumerate(commands):
+        run_cmd(*cmd)
+        print("CURRENT RUN: ", commands[idx][0])
+        pbar.update()
+        pbar.refresh()
+    """
     # Create a pool of pool_size workers
     with Pool(pool_size) as pool:
         # Assign the commands (tasks) to the pool, and run it

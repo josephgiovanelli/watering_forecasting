@@ -17,9 +17,9 @@ run_version = "v.1.0"
 algorithms = [
     # "PersistentSystem",
     # "LinearRegression",
-    # "RandomForest",
+    "RandomForest",
     "SVR",
-    # "FeedForward",
+    "FeedForward",
 ]
 
 case_studies = [

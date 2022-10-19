@@ -276,7 +276,16 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     Returns:
         _type_: the predicted y_train, y_val and y_test
     """
-    tf.random.set_seed(seed)
+    session_conf = tf.compat.v1.ConfigProto(
+        intra_op_parallelism_threads=6, inter_op_parallelism_threads=6
+    )
+    tf.compat.v1.set_random_seed(1)
+    sess = tf.compat.v1.Session(
+        graph=tensorflow.get_default_graph(), config=session_conf
+    )
+    keras.backend.set_session(sess)
+
+    # tf.random.set_seed(seed)
 
     # Fit X and y scalers
     X_scaler = globals()[config["normalization"]["type"]]().fit(X_train)
