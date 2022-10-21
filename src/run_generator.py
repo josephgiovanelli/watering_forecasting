@@ -12,14 +12,14 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.1.0"
+run_version = "v.1.1"
 
 algorithms = [
-    # "PersistentSystem",
-    # "LinearRegression",
+    "PersistentSystem",
+    "LinearRegression",
+    "FeedForward",
     "RandomForest",
     "SVR",
-    "FeedForward",
 ]
 
 case_studies = [
@@ -93,7 +93,7 @@ dict_template = OrderedDict(
                 "test_scenario_name": "",
             },
         ),
-        ("arrangement", "Fondo PROGETTO"),
+        ("arrangement", "Fondo PROGETTO single sensor"),
         ("run_version", run_version),
         (
             "window_parameters",
@@ -209,7 +209,7 @@ def generate_runs(db_credentials_file_path):
                     normalization = " - Normalization: standard"
                 run["tuning_parameters"][
                     "description"
-                ] = f'''"First attempt of {run["tuning_parameters"]["kind"]} with all sensors - Train field: {run["field_names"]["train_field_name"]}, Val field: {run["field_names"]["val_field_name"]}, Test field: {run["field_names"]["test_field_name"]} - Train scenario: {run["scenario_names"]["train_scenario_name"]}, Val scenario: {run["scenario_names"]["val_scenario_name"]}, Test scenario: {run["scenario_names"]["test_scenario_name"]} - Imputation: bfill+ffill{normalization}"'''
+                ] = f'''"First attempt of {run["tuning_parameters"]["kind"]} with one sensor [0] - Train field: {run["field_names"]["train_field_name"]}, Val field: {run["field_names"]["val_field_name"]}, Test field: {run["field_names"]["test_field_name"]} - Train scenario: {run["scenario_names"]["train_scenario_name"]}, Val scenario: {run["scenario_names"]["val_scenario_name"]}, Test scenario: {run["scenario_names"]["test_scenario_name"]} - Imputation: bfill+ffill{normalization}"'''
 
                 algo_name = re.sub(
                     " |\.", "_", run["tuning_parameters"]["algorithm_name"]

@@ -296,7 +296,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
 
     # Compile the model
     dnn.compile(
-        loss=root_mean_squared_error,  # tf.keras.metrics.RootMeanSquaredError(),  # "mse",
+        loss=root_mean_squared_error,  # "mse",
         optimizer=config["regression"]["optimizer"],
         metrics=[tf.keras.metrics.RootMeanSquaredError()],
     )
