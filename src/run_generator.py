@@ -15,10 +15,10 @@ from utils.data_acquisition import (
 run_version = "v.1.1"
 
 algorithms = [
-    "PersistentSystem",
-    "LinearRegression",
-    "FeedForward",
-    "RandomForest",
+    # "PersistentSystem",
+    # "LinearRegression",
+    # "FeedForward",
+    # "RandomForest",
     "SVR",
 ]
 
