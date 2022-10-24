@@ -12,13 +12,13 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.1.1"
+run_version = "v.1.2"
 
 algorithms = [
-    # "PersistentSystem",
-    # "LinearRegression",
-    # "FeedForward",
-    # "RandomForest",
+    "PersistentSystem",
+    "LinearRegression",
+    "FeedForward",
+    "RandomForest",
     "SVR",
 ]
 
@@ -93,7 +93,7 @@ dict_template = OrderedDict(
                 "test_scenario_name": "",
             },
         ),
-        ("arrangement", "Fondo PROGETTO single sensor"),
+        ("arrangement", "Fondo PROGETTO single sensor 1"),
         ("run_version", run_version),
         (
             "window_parameters",
