@@ -212,6 +212,7 @@ def main(args, run_cfg, db_cfg):
     algo_col_dict["name"] = run_cfg["tuning_parameters"]["algorithm_name"]
     algo_col_dict["kind"] = run_cfg["tuning_parameters"]["kind"]
     algo_col_dict["description"] = run_cfg["tuning_parameters"]["description"]
+    algo_col_dict["version"] = run_cfg["run_version"]
     algo_df = pd.DataFrame.from_dict([algo_col_dict])
 
     # Populate 'synthetic_algorithm_hyperparameters' table
