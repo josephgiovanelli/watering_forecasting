@@ -52,6 +52,10 @@ from tensorflow.keras.optimizers import RMSprop
 from tensorflow.keras.optimizers import Adadelta
 from tensorflow.keras.optimizers import Adam
 
+# Keras schedulers
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
+from tensorflow.keras.optimizers.schedules import CosineDecay
+
 from utils.data_acquisition import (
     normalize_data,
     denormalize_data,
@@ -357,20 +361,51 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         y_scaler,
     )
 
+    # Instantiate optimizer and callbacks
+    optimizer = None
+    callbacks = []
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=(2 ** config["regression"]["num_epochs"]) // 5,
+        restore_best_weights=True,
+    )
+    callbacks.append(early_stop)
+    if config["regression"]["scheduler"] == "ReduceLROnPlateau":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=config["regression"]["learning_rate"]
+        )
+        reduce_lr = keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss",
+            factor=0.8,
+            patience=(2 ** config["regression"]["num_epochs"]) // 10,
+            mode="min",
+            min_lr=0.000001,
+        )
+        callbacks.append(reduce_lr)
+    elif config["regression"]["scheduler"] == "ExponentialDecay":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=globals()[config["regression"]["scheduler"]](
+                initial_learning_rate=config["regression"]["learning_rate"],
+                decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
+                decay_rate=0.8,
+            )
+        )
+    else:
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=globals()[config["regression"]["scheduler"]](
+                initial_learning_rate=config["regression"]["learning_rate"],
+                decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
+            )
+        )
+
     # Compile the model
     dnn.compile(
-        loss=root_mean_squared_error,  # "mse",
-        optimizer=globals()[config["regression"]["optimizer"]](
-            learning_rate=config["regression"]["learning_rate"]
-        ),
+        loss=root_mean_squared_error,
+        optimizer=optimizer,
         metrics=[tf.keras.metrics.RootMeanSquaredError()],
     )
 
     # Fit the model
-    patience = 50
-    early_stop = keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=patience, restore_best_weights=True
-    )
     dnn.fit(
         X_train,
         y_train,
@@ -378,7 +413,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         epochs=2 ** config["regression"]["num_epochs"],
         batch_size=2 ** config["regression"]["batch_size"],
         shuffle=True,
-        callbacks=[early_stop],
+        callbacks=callbacks,
     )
 
     # Prediciton

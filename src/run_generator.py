@@ -22,7 +22,6 @@ algorithms = [
     # "SVR",
 ]
 
-
 case_studies = [
     # Synthetic vs Synthetic
     {

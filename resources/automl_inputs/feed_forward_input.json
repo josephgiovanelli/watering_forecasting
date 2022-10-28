@@ -79,8 +79,15 @@
                 },
                 "learning_rate": {
                     "loguniform": [
-                        0.000001,
+                        0.0001,
                         1.0
+                    ]
+                },
+                "scheduler": {
+                    "choice": [
+                        "ReduceLROnPlateau",
+                        "ExponentialDecay",
+                        "CosineDecay"
                     ]
                 }
             }
