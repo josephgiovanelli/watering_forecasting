@@ -45,6 +45,13 @@ from sklearn.svm import SVR
 import tensorflow as tf
 from tensorflow import keras
 
+# Keras optimizers
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.optimizers import Adagrad
+from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.optimizers import Adadelta
+from tensorflow.keras.optimizers import Adam
+
 from utils.data_acquisition import (
     normalize_data,
     denormalize_data,
@@ -287,7 +294,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     # Compile the model
     dnn.compile(
         loss=root_mean_squared_error,  # "mse",
-        optimizer=config["regression"]["optimizer"],
+        optimizer=globals()[config["regression"]["optimizer"]](),
         metrics=[tf.keras.metrics.RootMeanSquaredError()],
     )
 
