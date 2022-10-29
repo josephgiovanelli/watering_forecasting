@@ -72,7 +72,7 @@
                     "choice": [
                         "SGD",
                         "Adagrad",
-                        "RMSProp",
+                        "RMSprop",
                         "Adadelta",
                         "Adam"
                     ]

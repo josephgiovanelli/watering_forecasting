@@ -23,6 +23,23 @@ algorithms = [
 ]
 
 case_studies = [
+    # Synthetic vs Real
+    {
+        "field_names": {
+            "train_field_name": "Synthetic field v.1.0",
+            "val_field_name": "Synthetic field v.1.0",
+            "test_field_name": "Real Fondo PROGETTO_1",
+        },
+        "scenario_names": {
+            "train_scenario_name": "Synthetic Martorano v.1.0",
+            "val_scenario_name": "Synthetic Bologna v.1.0",
+            "test_scenario_name": "Real Fondo PROGETTO_1 2020",  # real watering
+        },
+    },
+]
+
+"""
+case_studies = [
     # Synthetic vs Synthetic
     {
         "field_names": {
@@ -63,8 +80,9 @@ case_studies = [
         },
     },
 ]
+"""
 
-rolling_window_parameters_values = [6, 12, 24, 48, 96, 168]
+rolling_window_parameters_values = [48]  # [6, 12, 24, 48, 96, 168]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -209,7 +227,7 @@ def generate_runs(db_credentials_file_path):
                     normalization = " - Normalization: standard"
                 run["tuning_parameters"][
                     "description"
-                ] = f'''"First attempt of {run["tuning_parameters"]["kind"]} with one sensor [0] - Train field: {run["field_names"]["train_field_name"]}, Val field: {run["field_names"]["val_field_name"]}, Test field: {run["field_names"]["test_field_name"]} - Train scenario: {run["scenario_names"]["train_scenario_name"]}, Val scenario: {run["scenario_names"]["val_scenario_name"]}, Test scenario: {run["scenario_names"]["test_scenario_name"]} - Imputation: bfill+ffill{normalization}"'''
+                ] = f'''"First attempt of {run["tuning_parameters"]["kind"]} with all sensors - Train field: {run["field_names"]["train_field_name"]}, Val field: {run["field_names"]["val_field_name"]}, Test field: {run["field_names"]["test_field_name"]} - Train scenario: {run["scenario_names"]["train_scenario_name"]}, Val scenario: {run["scenario_names"]["val_scenario_name"]}, Test scenario: {run["scenario_names"]["test_scenario_name"]} - Imputation: bfill+ffill{normalization}"'''
 
                 algo_name = re.sub(
                     " |\.", "_", run["tuning_parameters"]["algorithm_name"]
