@@ -109,7 +109,7 @@ def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
             data[variable] = data[variable].rename(columns={"value": variable})
             data[variable] = data[variable].set_index("timestamp")
 
-    result = pd.concat(list(data.values()), axis=1)
+    result = pd.concat(list(data.values()), axis=1, join="inner")
     return result.fillna(method="ffill")
 
 
@@ -359,6 +359,9 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                         axis=1,
                     )
 
+                    # Find timestamp intersection boundaries
+                    top_boundary = max(globals()[year_scenario_name + "_arpae"].index.min(), globals()[year_scenario_name + "_water"].index.min(), globals()[year_scenario_name + "_gp"].index.min())
+                    bottom_boundary = min(globals()[year_scenario_name + "_arpae"].index.max(), globals()[year_scenario_name + "_water"].index.max(), globals()[year_scenario_name + "_gp"].index.max())
                     # Concatenate weather, watering and ground potential data
                     globals()[year_scenario_name + "_df"] = pd.concat(
                         [
@@ -367,16 +370,21 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                             globals()[year_scenario_name + "_gp_df"],
                         ],
                         axis=1,
+                        join="outer",
                     )
+                    # Keep only common timestamps
+                    globals()[year_scenario_name + "_df"] = globals()[year_scenario_name + "_df"].loc[top_boundary:bottom_boundary]
 
                     print(year_scenario, " - Pivoted")
 
+                    """
                     # Imputation
                     globals()[year_scenario_name + "_df"] = (
                         globals()[year_scenario_name + "_df"]
                         .fillna(method="ffill")
                         .fillna(method="bfill")
                     )
+                    """
                     # Rename columns
                     globals()[year_scenario_name + "_df"].index.names = [
                         "unix_timestamp"
@@ -406,15 +414,13 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                     ][cols]
 
                     # Add and impute missing timestamps
-                    min_timestamp = globals()[year_scenario_name + "_df"].index.min()
-                    max_timestamp = globals()[year_scenario_name + "_df"].index.max()
                     timestamps_range = list(
-                        range(min_timestamp, max_timestamp + 1, 3600)
+                        range(top_boundary, bottom_boundary + 1, 3600)
                     )
                     missing_timestamps = [
                         timestamp
-                        for timestamp in globals()[year_scenario_name + "_df"].index
-                        if timestamp not in timestamps_range
+                        for timestamp in timestamps_range
+                        if timestamp not in globals()[year_scenario_name + "_df"].index
                     ]
                     for timestamp in missing_timestamps:
                         globals()[year_scenario_name + "_df"].loc[
@@ -424,11 +430,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                             index=globals()[year_scenario_name + "_df"].columns,
                         )
                     globals()[year_scenario_name + "_df"].sort_index(inplace=True)
-                    globals()[year_scenario_name + "_df"] = (
-                        globals()[year_scenario_name + "_df"]
-                        .fillna(method="ffill")
-                        .fillna(method="bfill")
-                    )
+                    globals()[year_scenario_name + "_df"].interpolate(limit_direction="both", inplace=True)
 
                     # Rename sensors columns to real values
                     globals()[year_scenario_name + "_df"].rename(
