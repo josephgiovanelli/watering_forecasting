@@ -52,6 +52,10 @@ from tensorflow.keras.optimizers import RMSprop
 from tensorflow.keras.optimizers import Adadelta
 from tensorflow.keras.optimizers import Adam
 
+# Keras schedulers
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
+from tensorflow.keras.optimizers.schedules import CosineDecay
+
 from utils.data_acquisition import (
     normalize_data,
     denormalize_data,
@@ -137,6 +141,59 @@ def instantiate_pipeline(prototype, seed, config, columns, stride_past):
 
     # Instantiate the pipeline from the array
     return Pipeline(pipeline)
+
+
+def get_neuron_count_per_hidden_layer(config):
+    # If encoding
+    if config["regression"]["encoder"]:
+        # we iteratively divide the num_neurons until the half of the network, specifically:
+        neuron_count_per_hidden_layer = [
+            # the list is built of integers
+            int(
+                # the actual num_neurons is equal to 2 power to num_neurons
+                (2 ** config["regression"]["num_neurons"])
+                / (
+                    # then we divide it by 2 power to
+                    2
+                    ** (
+                        # the current position (index) in the list (network) IF IT IS IN THE FIRST HALF
+                        index
+                        if index < (config["regression"]["num_hidden_layers"] / 2)
+                        # the inverted position (index) in the list (network) IF IT IS IN THE SECOND HALF
+                        else config["regression"]["num_hidden_layers"] - 1 - index
+                    )
+                )
+            )
+            for index in range(config["regression"]["num_hidden_layers"])
+        ]
+    # If not encoding
+    else:
+        # we repete num_neurons for each num_hidden_layers
+        neuron_count_per_hidden_layer = [
+            2 ** config["regression"]["num_neurons"]
+        ] * config["regression"]["num_hidden_layers"]
+
+    print(neuron_count_per_hidden_layer)
+    return neuron_count_per_hidden_layer
+
+
+def my_config_constraint(config):
+    # IF not encoding THEN max 3 hidden layers
+    # IF encoding THEN num_hidden_layers is an odd number AND at least 128 neurons in the larger layer
+    return (
+        config["regression"]["type"] == "FeedForward"
+        and (
+            (
+                not (config["regression"]["encoder"])
+                and config["regression"]["num_hidden_layers"] < 4
+            )
+            or (
+                config["regression"]["encoder"]
+                and config["regression"]["num_hidden_layers"] % 2 == 1
+                and config["regression"]["num_neurons"] > 6
+            )
+        )
+    ) or (not (config["regression"]["type"] == "FeedForward"))
 
 
 def scikitlearn_objective(
@@ -272,6 +329,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         config (_type_): the configuration to explore
     Returns:
         _type_: the predicted y_train, y_val and y_test
+                and the parameters of the chosen optimizer
     """
     tf.random.set_seed(seed)
 
@@ -283,7 +341,9 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     dnn = build_dnn(
         X_train.shape[1],
         y_train.shape[1],
-        eval(config["regression"]["neuron_count_per_hidden_layer"]),
+        get_neuron_count_per_hidden_layer(
+            config
+        ),  # eval(config["regression"]["neuron_count_per_hidden_layer"]),
         config["regression"]["activation_function"],
         config["regression"]["last_activation_function"],
         config["regression"]["dropout"],
@@ -291,26 +351,59 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         y_scaler,
     )
 
+    # Instantiate optimizer and callbacks
+    optimizer = None
+    callbacks = []
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=(2 ** config["regression"]["num_epochs"]) // 5,
+        restore_best_weights=True,
+    )
+    callbacks.append(early_stop)
+    if config["regression"]["scheduler"] == "ReduceLROnPlateau":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=config["regression"]["learning_rate"]
+        )
+        reduce_lr = keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss",
+            factor=0.8,
+            patience=(2 ** config["regression"]["num_epochs"]) // 10,
+            mode="min",
+            min_lr=0.000001,
+        )
+        callbacks.append(reduce_lr)
+    elif config["regression"]["scheduler"] == "ExponentialDecay":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=globals()[config["regression"]["scheduler"]](
+                initial_learning_rate=config["regression"]["learning_rate"],
+                decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
+                decay_rate=0.8,
+            )
+        )
+    else:
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=globals()[config["regression"]["scheduler"]](
+                initial_learning_rate=config["regression"]["learning_rate"],
+                decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
+            )
+        )
+
     # Compile the model
     dnn.compile(
-        loss=root_mean_squared_error,  # "mse",
-        optimizer=globals()[config["regression"]["optimizer"]](),
+        loss=root_mean_squared_error,
+        optimizer=optimizer,
         metrics=[tf.keras.metrics.RootMeanSquaredError()],
     )
 
     # Fit the model
-    patience = 50
-    early_stop = keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=patience, restore_best_weights=True
-    )
     dnn.fit(
         X_train,
         y_train,
         validation_data=(X_val, y_val),
-        epochs=config["regression"]["num_epochs"],
-        batch_size=config["regression"]["batch_size"],
+        epochs=2 ** config["regression"]["num_epochs"],
+        batch_size=2 ** config["regression"]["batch_size"],
         shuffle=True,
-        callbacks=[early_stop],
+        callbacks=callbacks,
     )
 
     # Prediciton
@@ -318,7 +411,17 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     y_val_pred = dnn.predict(X_val)
     y_test_pred = dnn.predict(X_test)
 
-    return y_train_pred, y_val_pred, y_test_pred
+    # Get the hyperparameters of the optimizer and convert float32 values to float values for compatibility reasons
+    optimizer_params = dnn.optimizer.get_config()
+    optimizer_params.update(
+        {
+            key: float(value)
+            for key, value in dnn.optimizer.get_config().items()
+            if type(value) == np.float32
+        }
+    )
+
+    return y_train_pred, y_val_pred, y_test_pred, optimizer_params
 
 
 def objective(
@@ -373,7 +476,7 @@ def objective(
 
     try:
         if config["regression"]["type"] == "FeedForward":
-            y_train_pred, y_val_pred, y_test_pred = keras_objective(
+            y_train_pred, y_val_pred, y_test_pred, optimizer_params = keras_objective(
                 X_train.to_numpy(),
                 y_train.to_numpy(),
                 X_val.to_numpy(),
@@ -453,6 +556,8 @@ def objective(
                         raise Exception(f"The result for {config} was")
         result["status"] = "success"
         result["conf"] = conf
+        if config["regression"]["type"] == "FeedForward":
+            result["optimizer_params"] = optimizer_params
 
         conf += 1
 

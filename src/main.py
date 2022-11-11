@@ -31,7 +31,7 @@ from utils.data_acquisition import (
     plot_results,
 )
 from utils.json_to_csv import json_to_csv
-from automl.optimization import objective  # my_config_constraint
+from automl.optimization import objective, my_config_constraint
 from automl.space_loading import get_space
 
 
@@ -97,7 +97,7 @@ def main(args, run_cfg, db_cfg):
     sensors_name_list = sensors_name_df.values.flatten()
 
     # Set tuning constraints
-    # config_constraints = [(my_config_constraint, ">=", True)]
+    config_constraints = [(my_config_constraint, ">=", True)]
 
     # Find best hyper-parameters
     start_time = time.time()
@@ -120,7 +120,7 @@ def main(args, run_cfg, db_cfg):
         mode="min",
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
         time_budget_s=223200,
-        # config_constraints=config_constraints,
+        config_constraints=config_constraints,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
     )
