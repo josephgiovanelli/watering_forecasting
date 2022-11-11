@@ -360,8 +360,16 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                     )
 
                     # Find timestamp intersection boundaries
-                    top_boundary = max(globals()[year_scenario_name + "_arpae"].index.min(), globals()[year_scenario_name + "_water"].index.min(), globals()[year_scenario_name + "_gp"].index.min())
-                    bottom_boundary = min(globals()[year_scenario_name + "_arpae"].index.max(), globals()[year_scenario_name + "_water"].index.max(), globals()[year_scenario_name + "_gp"].index.max())
+                    top_boundary = max(
+                        globals()[year_scenario_name + "_arpae_df"].index.min(),
+                        globals()[year_scenario_name + "_water_df"].index.min(),
+                        globals()[year_scenario_name + "_gp_df"].index.min(),
+                    )
+                    bottom_boundary = min(
+                        globals()[year_scenario_name + "_arpae_df"].index.max(),
+                        globals()[year_scenario_name + "_water_df"].index.max(),
+                        globals()[year_scenario_name + "_gp_df"].index.max(),
+                    )
                     # Concatenate weather, watering and ground potential data
                     globals()[year_scenario_name + "_df"] = pd.concat(
                         [
@@ -373,7 +381,9 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                         join="outer",
                     )
                     # Keep only common timestamps
-                    globals()[year_scenario_name + "_df"] = globals()[year_scenario_name + "_df"].loc[top_boundary:bottom_boundary]
+                    globals()[year_scenario_name + "_df"] = globals()[
+                        year_scenario_name + "_df"
+                    ].loc[top_boundary:bottom_boundary]
 
                     print(year_scenario, " - Pivoted")
 
@@ -430,7 +440,9 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                             index=globals()[year_scenario_name + "_df"].columns,
                         )
                     globals()[year_scenario_name + "_df"].sort_index(inplace=True)
-                    globals()[year_scenario_name + "_df"].interpolate(limit_direction="both", inplace=True)
+                    globals()[year_scenario_name + "_df"].interpolate(
+                        limit_direction="both", inplace=True
+                    )
 
                     # Rename sensors columns to real values
                     globals()[year_scenario_name + "_df"].rename(

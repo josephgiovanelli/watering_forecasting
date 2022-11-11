@@ -87,7 +87,8 @@
                     "choice": [
                         "ReduceLROnPlateau",
                         "ExponentialDecay",
-                        "CosineDecay"
+                        "CosineDecay",
+                        "None"
                     ]
                 }
             }

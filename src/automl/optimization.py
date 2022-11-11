@@ -356,7 +356,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     callbacks = []
     early_stop = keras.callbacks.EarlyStopping(
         monitor="val_loss",
-        patience=(2 ** config["regression"]["num_epochs"]) // 5,
+        patience=(2 ** config["regression"]["num_epochs"]) // 3,
         restore_best_weights=True,
     )
     callbacks.append(early_stop)
@@ -380,13 +380,15 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
                 decay_rate=0.8,
             )
         )
-    else:
+    elif config["regression"]["scheduler"] == "CosineDecay":
         optimizer = globals()[config["regression"]["optimizer"]](
             learning_rate=globals()[config["regression"]["scheduler"]](
                 initial_learning_rate=config["regression"]["learning_rate"],
                 decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
             )
         )
+    else:
+        optimizer = globals()[config["regression"]["optimizer"]]()
 
     # Compile the model
     dnn.compile(
