@@ -1,6 +1,18 @@
 import os
+
+seed = int(os.environ["PYTHONHASHSEED"])
+os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+os.environ["TF_DETERMINISTIC_OPS"] = "1"
+
+import random as python_random
+
+python_random.seed(seed)
+
 import traceback
 import numpy as np
+
+np.random.seed(seed)
+
 import pandas as pd
 
 from sklearn.pipeline import Pipeline
@@ -43,6 +55,11 @@ from sklearn.svm import SVR
 
 # NNs
 import tensorflow as tf
+
+tf.random.set_seed(seed)
+tf.experimental.numpy.random.seed(seed)
+tf.keras.utils.set_random_seed(seed)
+
 from tensorflow import keras
 
 # Keras optimizers
@@ -331,7 +348,18 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         _type_: the predicted y_train, y_val and y_test
                 and the parameters of the chosen optimizer
     """
+    os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+    os.environ["TF_DETERMINISTIC_OPS"] = "1"
+
+    python_random.seed(seed)
+    np.random.seed(seed)
+
+    tf.keras.backend.clear_session()
+    tf.compat.v1.reset_default_graph()
+
     tf.random.set_seed(seed)
+    tf.experimental.numpy.random.seed(seed)
+    tf.keras.utils.set_random_seed(seed)
 
     # Fit X and y scalers
     X_scaler = globals()[config["normalization"]["type"]]().fit(X_train)
@@ -404,7 +432,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         validation_data=(X_val, y_val),
         epochs=2 ** config["regression"]["num_epochs"],
         batch_size=2 ** config["regression"]["batch_size"],
-        shuffle=True,
+        shuffle=False,
         callbacks=callbacks,
     )
 
@@ -540,9 +568,15 @@ def objective(
             result["test_raw_scores"][f"test_raw_score_{idx}"] = rmse
 
         # Compute average RMSE
-        result["train_score"] = mean_squared_error(y_train, y_train_pred, squared=False)
-        result["val_score"] = mean_squared_error(y_val, y_val_pred, squared=False)
-        result["test_score"] = mean_squared_error(y_test, y_test_pred, squared=False)
+        result["train_score"] = np.around(
+            mean_squared_error(y_train, y_train_pred, squared=False), 2
+        )
+        result["val_score"] = np.around(
+            mean_squared_error(y_val, y_val_pred, squared=False), 2
+        )
+        result["test_score"] = np.around(
+            mean_squared_error(y_test, y_test_pred, squared=False), 2
+        )
 
         # If something is NaN, raise an exception
         for metric in result:

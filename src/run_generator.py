@@ -130,7 +130,7 @@ dict_template = OrderedDict(
                 "case_study": "",
                 "description": "",
                 "batch_size": -1,
-                "seed": 42,
+                # "seed": 42,
             },
         ),
     ]

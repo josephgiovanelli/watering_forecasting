@@ -1,4 +1,23 @@
 import os
+
+seed = int(os.environ["PYTHONHASHSEED"])
+os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+os.environ["TF_DETERMINISTIC_OPS"] = "1"
+
+import random as python_random
+
+python_random.seed(seed)
+
+import numpy as np
+
+np.random.seed(seed)
+
+import tensorflow as tf
+
+tf.random.set_seed(seed)
+tf.experimental.numpy.random.seed(seed)
+tf.keras.utils.set_random_seed(seed)
+
 import re
 import json
 import time
@@ -12,8 +31,6 @@ import pandas as pd
 
 pd.set_option("display.max_columns", 500)
 # pd.set_option("display.max_rows", 5000)
-
-import numpy as np
 
 from functools import partial
 from flaml import tune
@@ -36,8 +53,6 @@ from automl.space_loading import get_space
 
 
 def main(args, run_cfg, db_cfg):
-    np.random.seed(run_cfg["tuning_parameters"]["seed"])
-
     # Set meaningful information previously obtained
     real_sensors = pd.read_csv(os.path.join("resources", "real_sensors.csv")).values
     Parameters().set_real_sensors_coords(real_sensors)
@@ -111,7 +126,7 @@ def main(args, run_cfg, db_cfg):
             X_test.copy(),
             y_test.copy(),
             run_cfg["window_parameters"]["stride_past"],
-            run_cfg["tuning_parameters"]["seed"],
+            seed,
             args.run_directory_path,
             sensors_name_list,
         ),
@@ -119,7 +134,7 @@ def main(args, run_cfg, db_cfg):
         metric="val_score",
         mode="min",
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
-        time_budget_s=210000,
+        time_budget_s=900,
         config_constraints=config_constraints,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
@@ -250,6 +265,7 @@ def main(args, run_cfg, db_cfg):
     # print("hyper_df")
     # print(hyper_df)
 
+    """
     algo_df.to_sql(
         name="synthetic_algorithm", con=connection, index=False, if_exists="append"
     )
@@ -259,6 +275,7 @@ def main(args, run_cfg, db_cfg):
         index=False,
         if_exists="append",
     )
+    """
 
     # Compute min and max values for ground potential data
     sets_dict = {}
@@ -397,6 +414,7 @@ def main(args, run_cfg, db_cfg):
         # print("syn_algo_df")
         # print(syn_algo_df)
 
+        """
         # Store best result on DB
         syn_pred_hum_bins_df.to_sql(
             name="synthetic_prediction_humidity_bins",
@@ -419,6 +437,7 @@ def main(args, run_cfg, db_cfg):
         syn_pred_df.to_sql(
             name="synthetic_prediction", con=connection, index=False, if_exists="append"
         )
+        """
 
         # Plot best result for each set
         plot_results(
