@@ -65,7 +65,6 @@ def main(args, run_cfg, db_cfg):
         df, run_cfg["window_parameters"]["n_hours_ahead"], test_ratio=0.33, val_ratio=0.5, shuffle=False
     )
     """
-
     ### DB MODE
     # Load the datasets from CSV files
     case_study = re.sub(" |\.", "_", run_cfg["tuning_parameters"]["case_study"])
