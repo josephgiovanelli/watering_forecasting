@@ -384,7 +384,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     callbacks = []
     early_stop = keras.callbacks.EarlyStopping(
         monitor="val_loss",
-        patience=(2 ** config["regression"]["num_epochs"]) // 3,
+        patience=(2 ** config["regression"]["num_epochs"]) // 5,
         restore_best_weights=True,
     )
     callbacks.append(early_stop)
