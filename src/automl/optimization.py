@@ -432,7 +432,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         validation_data=(X_val, y_val),
         epochs=2 ** config["regression"]["num_epochs"],
         batch_size=2 ** config["regression"]["batch_size"],
-        shuffle=False,
+        shuffle=True,
         callbacks=callbacks,
     )
 

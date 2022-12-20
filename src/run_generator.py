@@ -12,7 +12,7 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.1.0.3"
+run_version = "v.1.0.3_trial"
 
 algorithms = [
     # "PersistentSystem",

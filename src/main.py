@@ -19,6 +19,7 @@ tf.experimental.numpy.random.seed(seed)
 tf.keras.utils.set_random_seed(seed)
 
 import re
+import ast
 import json
 import time
 import warnings
@@ -65,6 +66,7 @@ def main(args, run_cfg, db_cfg):
         df, run_cfg["window_parameters"]["n_hours_ahead"], test_ratio=0.33, val_ratio=0.5, shuffle=False
     )
     """
+
     ### DB MODE
     # Load the datasets from CSV files
     case_study = re.sub(" |\.", "_", run_cfg["tuning_parameters"]["case_study"])
@@ -113,6 +115,10 @@ def main(args, run_cfg, db_cfg):
     # Set tuning constraints
     config_constraints = [(my_config_constraint, ">=", True)]
 
+    # Load points to evaluate file into list of dictionaries
+    with open(os.path.join("resources", "points_to_evaluate.txt")) as file:
+        points_to_evaluate = [ast.literal_eval(line.strip()) for line in file]
+
     # Find best hyper-parameters
     start_time = time.time()
     analysis = tune.run(
@@ -132,8 +138,9 @@ def main(args, run_cfg, db_cfg):
         config=space,
         metric="val_score",
         mode="min",
-        num_samples=run_cfg["tuning_parameters"]["batch_size"],
-        time_budget_s=900,
+        points_to_evaluate=points_to_evaluate,
+        num_samples=len(points_to_evaluate),
+        # time_budget_s=1,
         config_constraints=config_constraints,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
