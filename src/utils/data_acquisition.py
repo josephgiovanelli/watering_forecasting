@@ -183,7 +183,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
         FROM synthetic_data \
         WHERE field_name = '{}' \
         AND scenario_name = '{}' \
-        AND value_type_name = 'GROUND_WATER_POTENTIAL' \
+        AND value_type_name = '{}' \
         ORDER BY unix_timestamp ASC, x ASC, y ASC, z DESC"
 
     sensors_query = "SELECT x, y, z \
@@ -197,14 +197,14 @@ def load_agro_data_from_db(run_cfg, db_cfg):
         FROM synthetic_data \
         WHERE field_name = '{field}' \
         AND scenario_name = '{scenario}' \
-        AND value_type_name = 'GROUND_WATER_POTENTIAL' \
+        AND value_type_name = '{value_type}' \
         GROUP BY x, y, z \
         HAVING COUNT(*) > ( \
             SELECT COUNT(DISTINCT unix_timestamp) / 4 \
             FROM synthetic_data \
             WHERE field_name = '{field}' \
             AND scenario_name = '{scenario}' \
-            AND value_type_name = 'GROUND_WATER_POTENTIAL')"
+            AND value_type_name = '{value_type}')"
 
     # Get the specific years scenarios for each scenario
     for field in fields_scenarios_dict:
@@ -240,7 +240,12 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                         water_query.format(year_scenario), connection
                     )
                     globals()[year_scenario_name + "_gp_df"] = pd.read_sql(
-                        gp_query.format(field_name, year_scenario), connection
+                        gp_query.format(
+                            field_name,
+                            year_scenario,
+                            run_cfg["tuning_parameters"]["value_type_name"],
+                        ),
+                        connection,
                     )
 
                     print(year_scenario)
@@ -267,6 +272,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                         frequent_sensors_query.format(
                             field=field_name,
                             scenario=year_scenario,
+                            value_type=run_cfg["tuning_parameters"]["value_type_name"],
                         ),
                         connection,
                     )  # take the first batch of the training scenario samples

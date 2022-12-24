@@ -1,10 +1,22 @@
 import os
+
+seed = int(os.environ["PYTHONHASHSEED"])
+os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+os.environ["TF_DETERMINISTIC_OPS"] = "1"
+
+import random as python_random
+
+python_random.seed(seed)
+
 import traceback
 import numpy as np
+
+np.random.seed(seed)
+
 import pandas as pd
 
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_squared_log_error
 
 ## Feature Engineering operators
 from sklearn.decomposition import PCA
@@ -43,6 +55,11 @@ from sklearn.svm import SVR
 
 # NNs
 import tensorflow as tf
+
+tf.random.set_seed(seed)
+tf.experimental.numpy.random.seed(seed)
+tf.keras.utils.set_random_seed(seed)
+
 from tensorflow import keras
 
 # Keras optimizers
@@ -260,7 +277,18 @@ def root_mean_squared_error(y_true, y_pred):
     )
 
 
-def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
+def log_root_mean_squared_error(y_true, y_pred):
+    return tf.keras.backend.sqrt(
+        tf.keras.backend.mean(
+            tf.keras.backend.square(
+                tf.keras.backend.log(tf.keras.backend.abs(y_pred))
+                - tf.keras.backend.log(tf.keras.backend.abs(y_true))
+            )
+        )
+    )
+
+
+def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config):
     """Objective function to optimize when Keras NNs are used.
     Args:
         X_train (_type_): the training set
@@ -273,7 +301,18 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     Returns:
         _type_: the predicted y_train, y_val and y_test
     """
+    os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
+    os.environ["TF_DETERMINISTIC_OPS"] = "1"
+
+    python_random.seed(seed)
+    np.random.seed(seed)
+
+    tf.keras.backend.clear_session()
+    tf.compat.v1.reset_default_graph()
+
     tf.random.set_seed(seed)
+    tf.experimental.numpy.random.seed(seed)
+    tf.keras.utils.set_random_seed(seed)
 
     # Fit X and y scalers
     X_scaler = globals()[config["normalization"]["type"]]().fit(X_train)
@@ -291,11 +330,55 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         y_scaler,
     )
 
+    # Instantiate optimizer and callbacks
+    optimizer = None
+    callbacks = []
+    early_stop = keras.callbacks.EarlyStopping(
+        monitor="val_loss",
+        patience=(2 ** config["regression"]["num_epochs"]) // 5,
+        restore_best_weights=True,
+    )
+    callbacks.append(early_stop)
+    if config["regression"]["scheduler"] == "ReduceLROnPlateau":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=config["regression"]["learning_rate"]
+        )
+        reduce_lr = keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss",
+            factor=0.8,
+            patience=(2 ** config["regression"]["num_epochs"]) // 10,
+            mode="min",
+            min_lr=0.000001,
+        )
+        callbacks.append(reduce_lr)
+    elif config["regression"]["scheduler"] == "ExponentialDecay":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=globals()[config["regression"]["scheduler"]](
+                initial_learning_rate=config["regression"]["learning_rate"],
+                decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
+                decay_rate=0.8,
+            )
+        )
+    elif config["regression"]["scheduler"] == "CosineDecay":
+        optimizer = globals()[config["regression"]["optimizer"]](
+            learning_rate=globals()[config["regression"]["scheduler"]](
+                initial_learning_rate=config["regression"]["learning_rate"],
+                decay_steps=(2 ** config["regression"]["num_epochs"]) // 10,
+            )
+        )
+    else:
+        optimizer = globals()[config["regression"]["optimizer"]]()
+
+    # Use the specified metric
+    metric_function = (
+        root_mean_squared_error if metric == "RMSE" else log_root_mean_squared_error
+    )
+
     # Compile the model
     dnn.compile(
-        loss=root_mean_squared_error,  # "mse",
-        optimizer=globals()[config["regression"]["optimizer"]](),
-        metrics=[tf.keras.metrics.RootMeanSquaredError()],
+        loss=metric_function,
+        optimizer=optimizer,
+        metrics=[metric_function],
     )
 
     # Fit the model
@@ -307,10 +390,10 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
         X_train,
         y_train,
         validation_data=(X_val, y_val),
-        epochs=config["regression"]["num_epochs"],
-        batch_size=config["regression"]["batch_size"],
-        shuffle=True,
-        callbacks=[early_stop],
+        epochs=2 ** config["regression"]["num_epochs"],
+        batch_size=2 ** config["regression"]["batch_size"],
+        shuffle=False,
+        callbacks=callbacks,
     )
 
     # Prediciton
@@ -329,6 +412,7 @@ def objective(
     X_test,
     y_test,
     stride_past,
+    metric,
     seed,
     run_path,
     sensors_name_list,
@@ -379,6 +463,7 @@ def objective(
                 X_val.to_numpy(),
                 y_val.to_numpy(),
                 X_test.to_numpy(),
+                metric,
                 seed,
                 config,
             )
@@ -415,29 +500,48 @@ def objective(
             os.path.join(run_path, "predictions", "conf_{}_test.csv".format(conf))
         )
 
+        # Use the specified metric
+        if metric == "LogRMSE":
+            metric_function = mean_squared_log_error
+            # Apply absolute value to predicted and target values to deal with LogRMSE
+            y_train = y_train.abs()
+            y_train_pred_df = y_train_pred_df.abs()
+            y_val = y_val.abs()
+            y_val_pred_df = y_val_pred_df.abs()
+            y_test = y_test.abs()
+            y_test_pred_df = y_test_pred_df.abs()
+        else:
+            metric_function = mean_squared_error
+
         # Compute raw RMSE (one value for each sensor)
-        train_raw_rmse = mean_squared_error(
-            y_train, y_train_pred, multioutput="raw_values", squared=False
+        train_raw_rmse = metric_function(
+            y_train, y_train_pred_df, multioutput="raw_values", squared=False
         )
         for idx, rmse in enumerate(train_raw_rmse):
             result["train_raw_scores"][f"train_raw_score_{idx}"] = rmse
 
-        val_raw_rmse = mean_squared_error(
-            y_val, y_val_pred, multioutput="raw_values", squared=False
+        val_raw_rmse = metric_function(
+            y_val, y_val_pred_df, multioutput="raw_values", squared=False
         )
         for idx, rmse in enumerate(val_raw_rmse):
             result["val_raw_scores"][f"val_raw_score_{idx}"] = rmse
 
-        test_raw_rmse = mean_squared_error(
-            y_test, y_test_pred, multioutput="raw_values", squared=False
+        test_raw_rmse = metric_function(
+            y_test, y_test_pred_df, multioutput="raw_values", squared=False
         )
         for idx, rmse in enumerate(test_raw_rmse):
             result["test_raw_scores"][f"test_raw_score_{idx}"] = rmse
 
         # Compute average RMSE
-        result["train_score"] = mean_squared_error(y_train, y_train_pred, squared=False)
-        result["val_score"] = mean_squared_error(y_val, y_val_pred, squared=False)
-        result["test_score"] = mean_squared_error(y_test, y_test_pred, squared=False)
+        result["train_score"] = np.around(
+            metric_function(y_train, y_train_pred_df, squared=False), 2
+        )
+        result["val_score"] = np.around(
+            metric_function(y_val, y_val_pred_df, squared=False), 2
+        )
+        result["test_score"] = np.around(
+            metric_function(y_test, y_test_pred_df, squared=False), 2
+        )
 
         # If something is NaN, raise an exception
         for metric in result:
