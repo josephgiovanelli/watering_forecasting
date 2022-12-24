@@ -65,6 +65,7 @@ def main(args, run_cfg, db_cfg):
         df, run_cfg["window_parameters"]["n_hours_ahead"], test_ratio=0.33, val_ratio=0.5, shuffle=False
     )
     """
+
     ### DB MODE
     # Load the datasets from CSV files
     case_study = re.sub(" |\.", "_", run_cfg["tuning_parameters"]["case_study"])
@@ -125,6 +126,7 @@ def main(args, run_cfg, db_cfg):
             X_test.copy(),
             y_test.copy(),
             run_cfg["window_parameters"]["stride_past"],
+            run_cfg["tuning_parameters"]["metric"],
             seed,
             args.run_directory_path,
             sensors_name_list,
@@ -133,7 +135,7 @@ def main(args, run_cfg, db_cfg):
         metric="val_score",
         mode="min",
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
-        time_budget_s=900,
+        time_budget_s=10,
         config_constraints=config_constraints,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
@@ -197,6 +199,7 @@ def main(args, run_cfg, db_cfg):
     humidity_bins_count_dict = {bin: 0 for bin in humidity_bins_df.index}
 
     common_col_dict = {
+        "value_type_name": run_cfg["tuning_parameters"]["value_type_name"],
         "algorithm_name": run_cfg["tuning_parameters"]["algorithm_name"],
         "train_field_name": run_cfg["field_names"]["train_field_name"],
         "train_scenario_name": run_cfg["scenario_names"]["train_scenario_name"],
@@ -304,7 +307,7 @@ def main(args, run_cfg, db_cfg):
         common_col_dict["dataset"] = set
 
         syn_pred_col_dict = dict(common_col_dict)
-        syn_pred_col_dict["value_type_name"] = "GROUND_WATER_POTENTIAL"
+        # syn_pred_col_dict["value_type_name"] = "GROUND_WATER_POTENTIAL"
         syn_pred_col_dict[
             "prediction_type_name"
         ] = f"""{run_cfg["window_parameters"]["n_hours_ahead"]}h AHEAD"""
@@ -359,6 +362,7 @@ def main(args, run_cfg, db_cfg):
                     ]
                     syn_sensor_rows_list.append(syn_sensor_col_dict)
 
+        del common_col_dict["value_type_name"]
         common_col_dict[
             "prediction_type_name"
         ] = f"""{run_cfg["window_parameters"]["n_hours_ahead"]}h AHEAD"""
@@ -391,6 +395,9 @@ def main(args, run_cfg, db_cfg):
                 syn_pred_hum_bins_rows_list.append(new_syn_pred_hum_bins_col_dict)
 
         del common_col_dict["prediction_type_name"]
+        common_col_dict["value_type_name"] = run_cfg["tuning_parameters"][
+            "value_type_name"
+        ]
 
         # Populate 'synthetic_field_scenario_algorithm' table
         syn_algo_col_dict = dict(common_col_dict)

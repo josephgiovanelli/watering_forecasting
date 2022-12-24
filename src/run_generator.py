@@ -12,7 +12,7 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.1.0.3"
+run_version = "v.1.0.3_log"
 
 algorithms = [
     # "PersistentSystem",
@@ -125,12 +125,13 @@ dict_template = OrderedDict(
         (
             "tuning_parameters",
             {
+                "value_type_name": "GROUND_WATER_POTENTIAL",  # GROUND_SATURATION_DEGREE
                 "algorithm_name": "",
                 "kind": "",
+                "metric": "LogRMSE",  # RMSE
                 "case_study": "",
                 "description": "",
                 "batch_size": -1,
-                # "seed": 42,
             },
         ),
     ]
@@ -222,12 +223,15 @@ def generate_runs(db_credentials_file_path):
                 ] = f"""{algorithm} {run_version} HA {parameter["n_hours_ahead"]} HP {parameter["n_hours_past"]} SA {parameter["stride_ahead"]} SP {parameter["stride_past"]} {case}"""
                 run["tuning_parameters"]["kind"] = algorithm
                 run["tuning_parameters"]["case_study"] = case
+                sensors = "all sensors"
+                if "single sensor" in run["arrangement"]:
+                    sensors = f"""one sensor [{run["arrangement"][-1]}]"""
                 normalization = ""
                 if algorithm == "SVR" or algorithm == "FeedForward":
                     normalization = " - Normalization: standard"
                 run["tuning_parameters"][
                     "description"
-                ] = f'''"First attempt of {run["tuning_parameters"]["kind"]} with all sensors - Train field: {run["field_names"]["train_field_name"]}, Val field: {run["field_names"]["val_field_name"]}, Test field: {run["field_names"]["test_field_name"]} - Train scenario: {run["scenario_names"]["train_scenario_name"]}, Val scenario: {run["scenario_names"]["val_scenario_name"]}, Test scenario: {run["scenario_names"]["test_scenario_name"]} - Imputation: bfill+ffill{normalization}"'''
+                ] = f'''"First attempt of {run["tuning_parameters"]["kind"]} with {sensors} - Train field: {run["field_names"]["train_field_name"]}, Val field: {run["field_names"]["val_field_name"]}, Test field: {run["field_names"]["test_field_name"]} - Train scenario: {run["scenario_names"]["train_scenario_name"]}, Val scenario: {run["scenario_names"]["val_scenario_name"]}, Test scenario: {run["scenario_names"]["test_scenario_name"]} - Imputation: linear interpolation{normalization} - Metric: {run["tuning_parameters"]["metric"]} - Output type: {run["tuning_parameters"]["value_type_name"]}"'''
 
                 algo_name = re.sub(
                     " |\.", "_", run["tuning_parameters"]["algorithm_name"]

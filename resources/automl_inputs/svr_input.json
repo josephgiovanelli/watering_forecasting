@@ -15,6 +15,7 @@
         "choice": [
             {
                 "meta_estimator": "TransformedTargetRegressor",
+                "super_type": "MultiOutputRegressor",
                 "type": "SVR",
                 "kernel": {
                     "choice": [

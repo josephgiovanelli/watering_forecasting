@@ -16,7 +16,7 @@ np.random.seed(seed)
 import pandas as pd
 
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_squared_log_error
 
 ## Feature Engineering operators
 from sklearn.decomposition import PCA
@@ -334,7 +334,18 @@ def root_mean_squared_error(y_true, y_pred):
     )
 
 
-def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
+def log_root_mean_squared_error(y_true, y_pred):
+    return tf.keras.backend.sqrt(
+        tf.keras.backend.mean(
+            tf.keras.backend.square(
+                tf.keras.backend.log(tf.keras.backend.abs(y_pred))
+                - tf.keras.backend.log(tf.keras.backend.abs(y_true))
+            )
+        )
+    )
+
+
+def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config):
     """Objective function to optimize when Keras NNs are used.
     Args:
         X_train (_type_): the training set
@@ -418,11 +429,16 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, seed, config):
     else:
         optimizer = globals()[config["regression"]["optimizer"]]()
 
+    # Use the specified metric
+    metric_function = (
+        root_mean_squared_error if metric == "RMSE" else log_root_mean_squared_error
+    )
+
     # Compile the model
     dnn.compile(
-        loss=root_mean_squared_error,
+        loss=metric_function,
         optimizer=optimizer,
-        metrics=[tf.keras.metrics.RootMeanSquaredError()],
+        metrics=[metric_function],
     )
 
     # Fit the model
@@ -462,6 +478,7 @@ def objective(
     X_test,
     y_test,
     stride_past,
+    metric,
     seed,
     run_path,
     sensors_name_list,
@@ -512,6 +529,7 @@ def objective(
                 X_val.to_numpy(),
                 y_val.to_numpy(),
                 X_test.to_numpy(),
+                metric,
                 seed,
                 config,
             )
@@ -548,34 +566,47 @@ def objective(
             os.path.join(run_path, "predictions", "conf_{}_test.csv".format(conf))
         )
 
+        # Use the specified metric
+        if metric == "LogRMSE":
+            metric_function = mean_squared_log_error
+            # Apply absolute value to predicted and target values to deal with LogRMSE
+            y_train = y_train.abs()
+            y_train_pred_df = y_train_pred_df.abs()
+            y_val = y_val.abs()
+            y_val_pred_df = y_val_pred_df.abs()
+            y_test = y_test.abs()
+            y_test_pred_df = y_test_pred_df.abs()
+        else:
+            metric_function = mean_squared_error
+
         # Compute raw RMSE (one value for each sensor)
-        train_raw_rmse = mean_squared_error(
-            y_train, y_train_pred, multioutput="raw_values", squared=False
+        train_raw_rmse = metric_function(
+            y_train, y_train_pred_df, multioutput="raw_values", squared=False
         )
         for idx, rmse in enumerate(train_raw_rmse):
             result["train_raw_scores"][f"train_raw_score_{idx}"] = rmse
 
-        val_raw_rmse = mean_squared_error(
-            y_val, y_val_pred, multioutput="raw_values", squared=False
+        val_raw_rmse = metric_function(
+            y_val, y_val_pred_df, multioutput="raw_values", squared=False
         )
         for idx, rmse in enumerate(val_raw_rmse):
             result["val_raw_scores"][f"val_raw_score_{idx}"] = rmse
 
-        test_raw_rmse = mean_squared_error(
-            y_test, y_test_pred, multioutput="raw_values", squared=False
+        test_raw_rmse = metric_function(
+            y_test, y_test_pred_df, multioutput="raw_values", squared=False
         )
         for idx, rmse in enumerate(test_raw_rmse):
             result["test_raw_scores"][f"test_raw_score_{idx}"] = rmse
 
         # Compute average RMSE
         result["train_score"] = np.around(
-            mean_squared_error(y_train, y_train_pred, squared=False), 2
+            metric_function(y_train, y_train_pred_df, squared=False), 2
         )
         result["val_score"] = np.around(
-            mean_squared_error(y_val, y_val_pred, squared=False), 2
+            metric_function(y_val, y_val_pred_df, squared=False), 2
         )
         result["test_score"] = np.around(
-            mean_squared_error(y_test, y_test_pred, squared=False), 2
+            metric_function(y_test, y_test_pred_df, squared=False), 2
         )
 
         # If something is NaN, raise an exception
