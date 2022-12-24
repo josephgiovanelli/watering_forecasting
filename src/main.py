@@ -112,7 +112,7 @@ def main(args, run_cfg, db_cfg):
     sensors_name_list = sensors_name_df.values.flatten()
 
     # Set tuning constraints
-    # config_constraints = [(my_config_constraint, ">=", True)]
+    config_constraints = [(my_config_constraint, ">=", True)]
 
     # Find best hyper-parameters
     start_time = time.time()
