@@ -135,7 +135,7 @@ def main(args, run_cfg, db_cfg):
         metric="val_score",
         mode="min",
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
-        time_budget_s=10,
+        time_budget_s=3600,
         config_constraints=config_constraints,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
@@ -267,7 +267,6 @@ def main(args, run_cfg, db_cfg):
     # print("hyper_df")
     # print(hyper_df)
 
-    """
     algo_df.to_sql(
         name="synthetic_algorithm", con=connection, index=False, if_exists="append"
     )
@@ -277,7 +276,6 @@ def main(args, run_cfg, db_cfg):
         index=False,
         if_exists="append",
     )
-    """
 
     # Compute min and max values for ground potential data
     sets_dict = {}
@@ -420,7 +418,6 @@ def main(args, run_cfg, db_cfg):
         # print("syn_algo_df")
         # print(syn_algo_df)
 
-        """
         # Store best result on DB
         syn_pred_hum_bins_df.to_sql(
             name="synthetic_prediction_humidity_bins",
@@ -443,7 +440,6 @@ def main(args, run_cfg, db_cfg):
         syn_pred_df.to_sql(
             name="synthetic_prediction", con=connection, index=False, if_exists="append"
         )
-        """
 
         # Plot best result for each set
         plot_results(

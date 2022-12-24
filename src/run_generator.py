@@ -23,23 +23,6 @@ algorithms = [
 ]
 
 case_studies = [
-    # Synthetic vs Real
-    {
-        "field_names": {
-            "train_field_name": "Synthetic field v.1.0",
-            "val_field_name": "Synthetic field v.1.0",
-            "test_field_name": "Real Fondo PROGETTO_1",
-        },
-        "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.1.0",
-            "val_scenario_name": "Synthetic Bologna v.1.0",
-            "test_scenario_name": "Real Fondo PROGETTO_1 2020",  # real watering
-        },
-    },
-]
-
-"""
-case_studies = [
     # Synthetic vs Synthetic
     {
         "field_names": {
@@ -80,9 +63,8 @@ case_studies = [
         },
     },
 ]
-"""
 
-rolling_window_parameters_values = [48]  # [6, 12, 24, 48, 96, 168]
+rolling_window_parameters_values = [6, 12, 24, 48, 96, 168]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -128,7 +110,7 @@ dict_template = OrderedDict(
                 "value_type_name": "GROUND_WATER_POTENTIAL",  # GROUND_SATURATION_DEGREE
                 "algorithm_name": "",
                 "kind": "",
-                "metric": "LogRMSE",  # RMSE
+                "metric": "RMSE",  # LogRMSE
                 "case_study": "",
                 "description": "",
                 "batch_size": -1,
