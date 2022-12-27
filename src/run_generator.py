@@ -12,40 +12,40 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.1.0"
+run_version = "v.2.0.0"
 
 algorithms = [
-    # "PersistentSystem",
-    # "LinearRegression",
+    "PersistentSystem",
+    "LinearRegression",
     "FeedForward",
-    # "RandomForest",
-    # "SVR",
+    "RandomForest",
+    "SVR",
 ]
 
 case_studies = [
     # Synthetic vs Synthetic
     {
         "field_names": {
-            "train_field_name": "Synthetic field v.1.0",
-            "val_field_name": "Synthetic field v.1.0",
-            "test_field_name": "Synthetic field v.1.0",
+            "train_field_name": "Synthetic field PROGETTO v.1.0",
+            "val_field_name": "Synthetic field PROGETTO v.1.0",
+            "test_field_name": "Synthetic field PROGETTO v.1.0",
         },
         "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.1.0",
-            "val_scenario_name": "Synthetic Bologna v.1.0",
+            "train_scenario_name": "Synthetic Martorano v.2.0",
+            "val_scenario_name": "Synthetic Bologna v.2.0",
             "test_scenario_name": "Real Fondo PROGETTO_1 2020",  # real watering
         },
     },
     # Synthetic vs Real
     {
         "field_names": {
-            "train_field_name": "Synthetic field v.1.0",
-            "val_field_name": "Synthetic field v.1.0",
+            "train_field_name": "Synthetic field PROGETTO v.1.0",
+            "val_field_name": "Synthetic field PROGETTO v.1.0",
             "test_field_name": "Real Fondo PROGETTO_1",
         },
         "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.1.0",
-            "val_scenario_name": "Synthetic Bologna v.1.0",
+            "train_scenario_name": "Synthetic Martorano v.2.0",
+            "val_scenario_name": "Synthetic Bologna v.2.0",
             "test_scenario_name": "Real Fondo PROGETTO_1 2020",  # real watering
         },
     },
