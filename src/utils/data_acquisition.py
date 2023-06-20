@@ -20,6 +20,7 @@ import tensorflow as tf
 
 from utils.parameters import Parameters
 
+pd.set_option("display.max_columns", 500)
 
 def load_agro_data_from_csv(path=os.path.join("/", "home", "data")):
     def _ground_potential_reconstruction(df):
@@ -267,6 +268,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
         for field_name in fields_scenarios_dict[field]:
             for scenario in fields_scenarios_dict[field][field_name]:
                 for year_scenario in fields_scenarios_dict[field][field_name][scenario]:
+                    """
                     # Get the coordinates of the most frequent synthetic sensors
                     frequent_sensors_df = pd.read_sql(
                         frequent_sensors_query.format(
@@ -297,14 +299,14 @@ def load_agro_data_from_db(run_cfg, db_cfg):
 
                     print("FILTERED SYNTHETIC SENSORS - {}:".format(year_scenario))
                     print(filtered_synthetic_sensors)
-
+                    """
                     # Save sensors coordinates for later usage
                     Parameters().set_real_sensors_coords(real_sensors)
                     pd.DataFrame(real_sensors).to_csv(
                         os.path.join("resources", "real_sensors.csv"), index=False
                     )
                     Parameters().set_synthetic_sensors_coords(
-                        filtered_synthetic_sensors
+                        real_sensors #filtered_synthetic_sensors
                     )
 
                     # Pivot weather and irrigation data
@@ -333,7 +335,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
                         year_scenario_name + "_gp_df"
                     ][
                         [
-                            i in filtered_synthetic_sensors
+                            i in real_sensors #filtered_synthetic_sensors
                             for i in zip(
                                 globals()[year_scenario_name + "_gp_df"].x,
                                 globals()[year_scenario_name + "_gp_df"].y,

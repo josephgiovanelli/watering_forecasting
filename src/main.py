@@ -100,16 +100,17 @@ def main(args, run_cfg, db_cfg):
     ### DB MODE
     connection = open_db_connection(db_cfg)
 
-    # Get the name (ID) of the real sensors
-    sensors_name_query = "SELECT sensor_name \
-        FROM synthetic_sensor_arrangement \
+    # Get the name (ID) and the coordinates of the real sensors
+    sensors_query = "SELECT sensor_name, x, y, z \
+        FROM synthetic_sensor_arrangement ssa \
+        INNER JOIN synthetic_sensor ss \
+        ON ssa.sensor_name = ss.name \
         WHERE arrangement_name = '{}' \
-        ORDER BY sensor_name::numeric ASC"
-    sensors_name_df = pd.read_sql(
-        sensors_name_query.format(run_cfg["arrangement"]),
+        ORDER BY x ASC, y ASC, z DESC"
+    sensors_df = pd.read_sql(
+        sensors_query.format(run_cfg["arrangement"]),
         connection,
     )
-    sensors_name_list = sensors_name_df.values.flatten()
 
     # Set tuning constraints
     config_constraints = [(my_config_constraint, ">=", True)]
@@ -129,7 +130,7 @@ def main(args, run_cfg, db_cfg):
             run_cfg["tuning_parameters"]["metric"],
             seed,
             args.run_directory_path,
-            sensors_name_list,
+            sensors_df,
         ),
         config=space,
         metric="val_score",

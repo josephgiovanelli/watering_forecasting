@@ -12,59 +12,45 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.2.0.0"
+run_version = "v.3.0.0"
 
 algorithms = [
     "PersistentSystem",
     "LinearRegression",
     "FeedForward",
     "RandomForest",
-    "SVR",
 ]
 
 case_studies = [
     # Synthetic vs Synthetic
     {
         "field_names": {
-            "train_field_name": "Synthetic field PROGETTO v.1.0",
-            "val_field_name": "Synthetic field PROGETTO v.1.0",
-            "test_field_name": "Synthetic field PROGETTO v.1.0",
+            "train_field_name": "Synthetic field ERRANO v.1.0",
+            "val_field_name": "Synthetic field ERRANO v.1.0",
+            "test_field_name": "Synthetic field ERRANO v.1.0",
         },
         "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.2.0",
-            "val_scenario_name": "Synthetic Bologna v.2.0",
-            "test_scenario_name": "Real Fondo PROGETTO_1 2020",  # real watering
+            "train_scenario_name": "Synthetic Martorano v.3.0",
+            "val_scenario_name": "Synthetic Bologna v.3.0",
+            "test_scenario_name": "Real Fondo ERRANO 2022",  # real watering
         },
     },
     # Synthetic vs Real
     {
         "field_names": {
-            "train_field_name": "Synthetic field PROGETTO v.1.0",
-            "val_field_name": "Synthetic field PROGETTO v.1.0",
-            "test_field_name": "Real Fondo PROGETTO_1",
+            "train_field_name": "Synthetic field ERRANO v.1.0",
+            "val_field_name": "Synthetic field ERRANO v.1.0",
+            "test_field_name": "Real Fondo ERRANO",
         },
         "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.2.0",
-            "val_scenario_name": "Synthetic Bologna v.2.0",
-            "test_scenario_name": "Real Fondo PROGETTO_1 2020",  # real watering
-        },
-    },
-    # Real vs Real
-    {
-        "field_names": {
-            "train_field_name": "Real Fondo PROGETTO_2",
-            "val_field_name": "Real Fondo PROGETTO_2",
-            "test_field_name": "Real Fondo PROGETTO_1",
-        },
-        "scenario_names": {
-            "train_scenario_name": "Real Fondo PROGETTO_2 2020",
-            "val_scenario_name": "Real Fondo PROGETTO_2 2020",
-            "test_scenario_name": "Real Fondo PROGETTO_1 2020",
+            "train_scenario_name": "Synthetic Martorano v.3.0",
+            "val_scenario_name": "Synthetic Bologna v.3.0",
+            "test_scenario_name": "Real Fondo ERRANO 2022",  # real watering
         },
     },
 ]
 
-rolling_window_parameters_values = [6, 12, 24, 48, 96, 168]
+rolling_window_parameters_values = [6, 12, 24, 48]
 rolling_window_parameters = [
     {
         "n_hours_ahead": value,
@@ -93,7 +79,7 @@ dict_template = OrderedDict(
                 "test_scenario_name": "",
             },
         ),
-        ("arrangement", "Fondo PROGETTO"),
+        ("arrangement", "Fondo ERRANO"),
         ("run_version", run_version),
         (
             "window_parameters",
@@ -245,6 +231,7 @@ def generate_runs(db_credentials_file_path):
                     fields_scenarios_dict = load_agro_data_from_db(
                         run, load_conf(db_credentials_file_path)
                     )
+                    print(fields_scenarios_dict)
                 if not os.listdir(data_path):
                     print("Create rolling window")  #
                     rolled_df_dict = {}

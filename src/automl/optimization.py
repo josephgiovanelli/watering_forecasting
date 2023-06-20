@@ -14,6 +14,7 @@ import numpy as np
 np.random.seed(seed)
 
 import pandas as pd
+import re
 
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error, mean_squared_log_error
@@ -462,7 +463,7 @@ def objective(
     metric,
     seed,
     run_path,
-    sensors_name_list,
+    sensors_df,
     config,
 ):
     """Function to optimize (i.e., the order of the pre-processing transformations + the ML algorithm)
@@ -476,7 +477,7 @@ def objective(
         stride_past (_type_): the specified stride for past observations
         seed (_type_): seed for reproducibility
         run_path (_type_): the current run path
-        sensors_name_list (_type_): the list of real sensor names
+        sensors_df (_type_): real sensor names and coordinates
         config (_type_): the current config to visit
     Raises:
         Exception: It tells if something went wrong during the optimization
@@ -486,6 +487,7 @@ def objective(
     global conf
 
     # Set the result if the config failed to be evaluated
+    sensors_name_list = sensors_df["sensor_name"].values.flatten()
     result = {
         "train_raw_scores": {
             f"train_raw_score_{name}": float("-inf") for name in sensors_name_list
@@ -564,20 +566,63 @@ def objective(
         train_raw_rmse = metric_function(
             y_train, y_train_pred_df, multioutput="raw_values", squared=False
         )
-        for idx, rmse in enumerate(train_raw_rmse):
-            result["train_raw_scores"][f"train_raw_score_{idx}"] = rmse
+        for idx, col in enumerate(y_train.columns):
+            z = re.sub("z", "", col.split("_")[0])
+            y = re.sub("y", "", col.split("_")[1])
+            x = re.sub("x", "", col.split("_")[2])
+
+            sensor_name = int(
+                sensors_df.loc[
+                    (sensors_df["z"] == float(z))
+                    & (sensors_df["y"] == float(y))
+                    & (sensors_df["x"] == float(x)),
+                    "sensor_name",
+                ]
+            )
+
+            result["train_raw_scores"][
+                f"train_raw_score_{sensor_name}"
+            ] = train_raw_rmse[idx]
 
         val_raw_rmse = metric_function(
             y_val, y_val_pred_df, multioutput="raw_values", squared=False
         )
-        for idx, rmse in enumerate(val_raw_rmse):
-            result["val_raw_scores"][f"val_raw_score_{idx}"] = rmse
+        for idx, col in enumerate(y_val.columns):
+            z = re.sub("z", "", col.split("_")[0])
+            y = re.sub("y", "", col.split("_")[1])
+            x = re.sub("x", "", col.split("_")[2])
+
+            sensor_name = int(
+                sensors_df.loc[
+                    (sensors_df["z"] == float(z))
+                    & (sensors_df["y"] == float(y))
+                    & (sensors_df["x"] == float(x)),
+                    "sensor_name",
+                ]
+            )
+
+            result["val_raw_scores"][f"val_raw_score_{sensor_name}"] = val_raw_rmse[idx]
 
         test_raw_rmse = metric_function(
             y_test, y_test_pred_df, multioutput="raw_values", squared=False
         )
-        for idx, rmse in enumerate(test_raw_rmse):
-            result["test_raw_scores"][f"test_raw_score_{idx}"] = rmse
+        for idx, col in enumerate(y_test.columns):
+            z = re.sub("z", "", col.split("_")[0])
+            y = re.sub("y", "", col.split("_")[1])
+            x = re.sub("x", "", col.split("_")[2])
+
+            sensor_name = int(
+                sensors_df.loc[
+                    (sensors_df["z"] == float(z))
+                    & (sensors_df["y"] == float(y))
+                    & (sensors_df["x"] == float(x)),
+                    "sensor_name",
+                ]
+            )
+
+            result["test_raw_scores"][f"test_raw_score_{sensor_name}"] = test_raw_rmse[
+                idx
+            ]
 
         # Compute average RMSE
         result["train_score"] = np.around(
