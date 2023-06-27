@@ -398,7 +398,7 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config
     callbacks.append(early_stop)
     if config["regression"]["optimizer"] == "SGD":  # non-adaptive optimizer
         optimizer = globals()[config["regression"]["optimizer"]](
-            learning_rate=config["regression"]["learning_rate"]
+            0.01 #learning_rate=config["regression"]["learning_rate"]
         )
         reduce_lr = keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
