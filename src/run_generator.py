@@ -12,40 +12,26 @@ from utils.data_acquisition import (
     get_data_labels,
 )
 
-run_version = "v.6.0.0"
+run_version = "v.4.0.2"
 
 algorithms = [
-    "PersistentSystem",
-    "LinearRegression",
-    "SVR",
-    "RandomForest",
+    "FeedForward",
 ]
+
+re_training_offset = 0
 
 case_studies = [
     # Synthetic vs Synthetic
     {
         "field_names": {
-            "train_field_name": "Synthetic field ERRANO v.2.0",
-            "val_field_name": "Synthetic field ERRANO v.2.0",
-            "test_field_name": "Synthetic field ERRANO v.2.0",
+            "train_field_name": "Synthetic field SANDY v.2.0",
+            "val_field_name": "Synthetic field SANDY v.2.0",
+            "test_field_name": "Synthetic field SANDY v.2.0",
         },
         "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.6.0",
-            "val_scenario_name": "Synthetic Bologna v.6.0",
-            "test_scenario_name": "Real Fondo ERRANO 2022",  # real watering
-        },
-    },
-    # Synthetic vs Real
-    {
-        "field_names": {
-            "train_field_name": "Synthetic field ERRANO v.2.0",
-            "val_field_name": "Synthetic field ERRANO v.2.0",
-            "test_field_name": "Real Fondo ERRANO",
-        },
-        "scenario_names": {
-            "train_scenario_name": "Synthetic Martorano v.6.0",
-            "val_scenario_name": "Synthetic Bologna v.6.0",
-            "test_scenario_name": "Real Fondo ERRANO 2022",  # real watering
+            "train_scenario_name": "Synthetic Martorano v.4.2",
+            "val_scenario_name": "Synthetic Bologna v.4.2.1",
+            "test_scenario_name": "Synthetic Bologna v.4.2.2",
         },
     },
 ]
@@ -100,6 +86,12 @@ dict_template = OrderedDict(
                 "case_study": "",
                 "description": "",
                 "batch_size": -1,
+            },
+        ),
+        (
+            "re_training_parameters",
+            {
+                "re_training_offset": re_training_offset,
             },
         ),
     ]

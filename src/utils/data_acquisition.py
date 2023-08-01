@@ -187,7 +187,7 @@ def load_agro_data_from_db(run_cfg, db_cfg):
         AND value_type_name = '{}' \
         ORDER BY unix_timestamp ASC, x ASC, y ASC, z DESC"
 
-    sensors_query = "SELECT x, y, z \
+    sensors_query = "SELECT name, x, y, z \
         FROM synthetic_sensor_arrangement ssa \
         INNER JOIN synthetic_sensor ss \
         ON ssa.sensor_name = ss.name \
@@ -255,6 +255,12 @@ def load_agro_data_from_db(run_cfg, db_cfg):
     sensors_coordinates_df = pd.read_sql(
         sensors_query.format(run_cfg["arrangement"]), connection
     )
+    ## Drop last sensors column ##
+    sensors_coordinates_df.drop(sensors_coordinates_df[sensors_coordinates_df['name'] == '14'].index, inplace = True)
+    sensors_coordinates_df.drop(sensors_coordinates_df[sensors_coordinates_df['name'] == '17'].index, inplace = True)
+    sensors_coordinates_df.drop(sensors_coordinates_df[sensors_coordinates_df['name'] == '20'].index, inplace = True)
+    sensors_coordinates_df = sensors_coordinates_df.drop(['name'], axis=1)
+    ##
     sensors_coordinates_df.sort_values(
         ["x", "y", "z"], ascending=[True, True, False], inplace=True
     )  # sort sensors in ascending order by x and y values and in descending order by z value

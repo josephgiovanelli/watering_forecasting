@@ -79,6 +79,10 @@ from utils.data_acquisition import (
 
 conf = 0  # configuration counter
 
+### RE-TRAINING VARIABLES ###
+global test_window
+test_window = 33 # number of days considered for test
+###
 
 def get_prototype(config):
     """Create the prototype (i.e., the order of the pre-processing transformations + the ml algorithm)
@@ -252,7 +256,7 @@ def scikitlearn_objective(
     estimator = pipeline.fit(X_train.to_numpy(), y_train.to_numpy())
     y_train_pred = estimator.predict(X_train.to_numpy())
     y_val_pred = estimator.predict(X_val.to_numpy())
-    y_test_pred = estimator.predict(X_test.to_numpy())
+    y_test_pred = estimator.predict(X_test.tail(test_window * 24).to_numpy()) #
 
     """
     # Inverse normalization
@@ -342,7 +346,7 @@ def log_root_mean_squared_error(y_true, y_pred):
     )
 
 
-def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config):
+def keras_objective(X_train, y_train, X_val, y_val, X_test, y_test, metric, seed, config, re_training_offset):
     """Objective function to optimize when Keras NNs are used.
     Args:
         X_train (_type_): the training set
@@ -370,13 +374,13 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config
     tf.keras.utils.set_random_seed(seed)
 
     # Fit X and y scalers
-    X_scaler = globals()[config["normalization"]["type"]]().fit(X_train)
-    y_scaler = globals()[config["normalization"]["type"]]().fit(y_train)
+    X_scaler = globals()[config["normalization"]["type"]]().fit(X_train.to_numpy())
+    y_scaler = globals()[config["normalization"]["type"]]().fit(y_train.to_numpy())
 
     # Create the model
     dnn = build_dnn(
-        X_train.shape[1],
-        y_train.shape[1],
+        X_train.to_numpy().shape[1],
+        y_train.to_numpy().shape[1],
         get_neuron_count_per_hidden_layer(
             config
         ),  # eval(config["regression"]["neuron_count_per_hidden_layer"]),
@@ -425,9 +429,9 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config
 
     # Fit the model
     dnn.fit(
-        X_train,
-        y_train,
-        validation_data=(X_val, y_val),
+        X_train.to_numpy(),
+        y_train.to_numpy(),
+        validation_data=(X_val.to_numpy(), y_val.to_numpy()),
         epochs=2 ** config["regression"]["num_epochs"],
         batch_size=2 ** config["regression"]["batch_size"],
         shuffle=False,
@@ -435,9 +439,9 @@ def keras_objective(X_train, y_train, X_val, y_val, X_test, metric, seed, config
     )
 
     # Prediciton
-    y_train_pred = dnn.predict(X_train)
-    y_val_pred = dnn.predict(X_val)
-    y_test_pred = dnn.predict(X_test)
+    y_train_pred = dnn.predict(X_train.to_numpy())
+    y_val_pred = dnn.predict(X_val.to_numpy())
+    y_test_pred = dnn.predict(X_test.tail(test_window * 24).to_numpy())
 
     # Get the hyperparameters of the optimizer and convert float32 values to float values for compatibility reasons
     optimizer_params = dnn.optimizer.get_config()
@@ -464,6 +468,7 @@ def objective(
     seed,
     run_path,
     sensors_df,
+    re_training_offset,
     config,
 ):
     """Function to optimize (i.e., the order of the pre-processing transformations + the ML algorithm)
@@ -507,14 +512,16 @@ def objective(
     try:
         if config["regression"]["type"] == "FeedForward":
             y_train_pred, y_val_pred, y_test_pred, optimizer_params = keras_objective(
-                X_train.to_numpy(),
-                y_train.to_numpy(),
-                X_val.to_numpy(),
-                y_val.to_numpy(),
-                X_test.to_numpy(),
+                X_train,
+                y_train,
+                X_val,
+                y_val,
+                X_test,
+                y_test,
                 metric,
                 seed,
                 config,
+                re_training_offset,
             )
         else:
             y_train_pred, y_val_pred, y_test_pred = scikitlearn_objective(
@@ -543,7 +550,7 @@ def objective(
             os.path.join(run_path, "predictions", "conf_{}_val.csv".format(conf))
         )
         y_test_pred_df = pd.DataFrame(
-            y_test_pred, columns=y_test.columns, index=y_test.index
+            y_test_pred, columns=y_test.tail(test_window * 24).columns, index=y_test.tail(test_window * 24).index
         )
         y_test_pred_df.to_csv(
             os.path.join(run_path, "predictions", "conf_{}_test.csv".format(conf))
@@ -604,7 +611,7 @@ def objective(
             result["val_raw_scores"][f"val_raw_score_{sensor_name}"] = val_raw_rmse[idx]
 
         test_raw_rmse = metric_function(
-            y_test, y_test_pred_df, multioutput="raw_values", squared=False
+            y_test.tail(test_window * 24), y_test_pred_df, multioutput="raw_values", squared=False
         )
         for idx, col in enumerate(y_test.columns):
             z = re.sub("z", "", col.split("_")[0])
@@ -632,7 +639,7 @@ def objective(
             metric_function(y_val, y_val_pred_df, squared=False), 2
         )
         result["test_score"] = np.around(
-            metric_function(y_test, y_test_pred_df, squared=False), 2
+            metric_function(y_test.tail(test_window * 24), y_test_pred_df, squared=False), 2
         )
 
         # If something is NaN, raise an exception

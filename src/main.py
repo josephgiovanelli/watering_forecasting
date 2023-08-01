@@ -131,12 +131,13 @@ def main(args, run_cfg, db_cfg):
             seed,
             args.run_directory_path,
             sensors_df,
+            run_cfg["re_training_parameters"]["re_training_offset"],
         ),
         config=space,
         metric="val_score",
         mode="min",
         num_samples=run_cfg["tuning_parameters"]["batch_size"],
-        time_budget_s=3600,
+        time_budget_s=86400,
         config_constraints=config_constraints,
         verbose=0,
         # max_failure=run_cfg["tuning_parameters"]["batch_size"],
@@ -204,8 +205,8 @@ def main(args, run_cfg, db_cfg):
         "algorithm_name": run_cfg["tuning_parameters"]["algorithm_name"],
         "train_field_name": run_cfg["field_names"]["train_field_name"],
         "train_scenario_name": run_cfg["scenario_names"]["train_scenario_name"],
-        "re_training": "NONE",
-        "re_training_timestamp": "NONE",
+        "re_training": "true",
+        "re_training_timestamp": str(run_cfg["re_training_parameters"]["re_training_offset"]),
     }
 
     basic_col_dict = {
